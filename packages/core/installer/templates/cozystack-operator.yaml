@@ -231,8 +231,17 @@ spec:
       tolerations:
       - key: "node.kubernetes.io/not-ready"
         operator: "Exists"
+      # Bounded on purpose, unlike the three beside it. A pod tolerating this
+      # taint without a bound is never evicted: it stays on a node nobody can
+      # reach, keeps the Ready it last reported, and this Deployment — one
+      # replica, maxUnavailable 0 — sees nothing to replace. The operator
+      # would then never come back from a lost node, and no Package would be
+      # reconciled again until someone deleted the pod by hand. not-ready
+      # stays unbounded because a node without a network plugin is NotReady
+      # and the operator is part of what installs one.
       - key: "node.kubernetes.io/unreachable"
         operator: "Exists"
+        tolerationSeconds: 60
       - key: "node.cilium.io/agent-not-ready"
         operator: "Exists"
       - key: "node.cloudprovider.kubernetes.io/uninitialized"
