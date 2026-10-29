@@ -1,8 +1,11 @@
 name: Pull Request
 
 env:
-  # TODO: unhardcode this
-  REGISTRY: iad.ocir.io/idyksih5sir9/cozystack
+  # Where the built images go. Unset, it is this repository's own namespace on
+  # the GitHub registry, which the built-in token can write to, so a fork
+  # builds images without being given any credentials. Upstream sets the
+  # REGISTRY and REGISTRY_HOST variables and keeps its OCIR secrets.
+  REGISTRY: ${{ vars.REGISTRY || format('ghcr.io/{0}', github.repository) }}
 on:
   pull_request:
     # `labeled` makes the promote PR's release-candidate verification and manual
@@ -400,6 +403,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -421,13 +425,13 @@ jobs:
           if [ -d ~/.docker ]; then
             cp -r ~/.docker "${{ runner.temp }}/.docker"
           fi
-      - name: Login to GitHub Container Registry
+      - name: Login to the image registry
         if: ${{ !github.event.pull_request.head.repo.fork }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          username: ${{ secrets.OCIR_USER }}
-          password: ${{ secrets.OCIR_TOKEN }}
-          registry: iad.ocir.io
+          registry: ${{ vars.REGISTRY_HOST || 'ghcr.io' }}
+          username: ${{ vars.REGISTRY_HOST && secrets.OCIR_USER || github.actor }}
+          password: ${{ vars.REGISTRY_HOST && secrets.OCIR_TOKEN || secrets.GITHUB_TOKEN }}
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
       # docker-container driver: isolated buildkit per job (no shared-buildkit
@@ -537,6 +541,7 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -548,13 +553,13 @@ jobs:
           if [ -d ~/.docker ]; then
             cp -r ~/.docker "${{ runner.temp }}/.docker"
           fi
-      - name: Login to GitHub Container Registry
+      - name: Login to the image registry
         if: ${{ !github.event.pull_request.head.repo.fork }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          username: ${{ secrets.OCIR_USER }}
-          password: ${{ secrets.OCIR_TOKEN }}
-          registry: iad.ocir.io
+          registry: ${{ vars.REGISTRY_HOST || 'ghcr.io' }}
+          username: ${{ vars.REGISTRY_HOST && secrets.OCIR_USER || github.actor }}
+          password: ${{ vars.REGISTRY_HOST && secrets.OCIR_TOKEN || secrets.GITHUB_TOKEN }}
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
       # buildkitd-config routes docker.io base-image pulls through mirror.gcr.io
@@ -627,6 +632,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -663,13 +669,13 @@ jobs:
           if [ -d ~/.docker ]; then
             cp -r ~/.docker "${{ runner.temp }}/.docker"
           fi
-      - name: Login to GitHub Container Registry
+      - name: Login to the image registry
         if: ${{ !github.event.pull_request.head.repo.fork }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          username: ${{ secrets.OCIR_USER }}
-          password: ${{ secrets.OCIR_TOKEN }}
-          registry: iad.ocir.io
+          registry: ${{ vars.REGISTRY_HOST || 'ghcr.io' }}
+          username: ${{ vars.REGISTRY_HOST && secrets.OCIR_USER || github.actor }}
+          password: ${{ vars.REGISTRY_HOST && secrets.OCIR_TOKEN || secrets.GITHUB_TOKEN }}
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
       # Overlay current-main image refs onto every package this PR did NOT

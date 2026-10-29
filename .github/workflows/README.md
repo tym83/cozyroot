@@ -28,3 +28,19 @@ Set a variable with:
 ```
 gh variable set RUNNER_XLARGE --body '<label>'
 ```
+
+# Image registry
+
+The pull-request workflow pushes the images it builds. Two more variables say
+where, and both are unset in a fresh clone:
+
+| Variable        | Falls back to                 | Meaning                       |
+|-----------------|-------------------------------|-------------------------------|
+| `REGISTRY`      | `ghcr.io/<owner>/<repo>`      | the repository images go to   |
+| `REGISTRY_HOST` | `ghcr.io`                     | the host that is logged in to |
+
+With neither set, the jobs authenticate as the workflow's own `GITHUB_TOKEN`
+and push to this repository's namespace on the GitHub registry, so a fork
+builds images without being handed any credentials. Setting `REGISTRY_HOST`
+switches the login to the `OCIR_USER` and `OCIR_TOKEN` secrets, which is how
+upstream reaches its own registry.
