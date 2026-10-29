@@ -1,3 +1,11 @@
 objectstorage:
   controller:
     image: "ghcr.io/cozystack/cozystack/objectstorage-controller:v1.6.0@sha256:9c284ef4f2fbbf5ee3ccd75f86ec6c993dc60aa673c6df3f9bd15d21a7e8485c"
+    # Where this controller may run. The platform threads these through
+    # spec.components.<name>.values of the Package, so a cluster can put the
+    # component on named nodes without the chart being edited in place.
+    # All three are empty by default, which is what the chart did before they
+    # existed: no node is ruled out and no taint is tolerated.
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []

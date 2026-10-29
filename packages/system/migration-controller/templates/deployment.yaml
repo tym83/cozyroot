@@ -14,13 +14,16 @@ spec:
       labels:
         app: migration-controller
     spec:
+      {{- with .Values.migrationController.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.migrationController.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       tolerations:
-      - key: "node-role.kubernetes.io/control-plane"
-        operator: "Exists"
-        effect: "NoSchedule"
-      - key: "node-role.kubernetes.io/master"
-        operator: "Exists"
-        effect: "NoSchedule"
+        {{- toYaml .Values.migrationController.tolerations | nindent 8 }}
       serviceAccountName: migration-controller
       {{- /*
         A controller whose whole purpose is to keep an import inside the

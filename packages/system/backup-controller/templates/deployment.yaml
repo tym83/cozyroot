@@ -14,13 +14,16 @@ spec:
       labels:
         app: backup-controller
     spec:
+      {{- with .Values.backupController.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.backupController.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       tolerations:
-      - key: "node-role.kubernetes.io/control-plane"
-        operator: "Exists"
-        effect: "NoSchedule"
-      - key: "node-role.kubernetes.io/master"
-        operator: "Exists"
-        effect: "NoSchedule"
+        {{- toYaml .Values.backupController.tolerations | nindent 8 }}
       serviceAccountName: backup-controller
       containers:
       - name: backup-controller

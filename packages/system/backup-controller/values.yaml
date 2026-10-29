@@ -1,5 +1,20 @@
 backupController:
   image: "ghcr.io/cozystack/cozystack/backup-controller:v1.6.0@sha256:fc4571354413d86ed11fa38dee8fd3d2d879e11c48d7d92c28630b2d54a2bcbb"
+  # Where this controller may run. The platform threads these through
+  # spec.components.<name>.values of the Package, so a cluster can put the
+  # component on named nodes without the chart being edited in place.
+  # The tolerations are the chart's former hard-coded pair: a controller has to
+  # keep running on a cluster whose only schedulable nodes are control-plane
+  # ones. Replacing the list drops them, which is the point of it being a value.
+  nodeSelector: {}
+  affinity: {}
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
   replicas: 2
   debug: false
   metrics:
