@@ -7,11 +7,13 @@ cozystackController:
   # stack that scrapes it run in a separate cluster. Empty keeps discovery
   # via the namespace.cozystack.io/monitoring label.
   seaweedfsMetricsEndpoint: ""
-  # Raising this gives the reconciliation loop a standby, not a second writer:
-  # the chart always passes --leader-elect, so exactly one manager holds the
-  # Lease and runs the reconcilers. With the default of 1 the extra Lease is
-  # the only difference from the previous hardcoded value.
-  replicas: 1
+  # A standby, not a second writer: the chart always passes --leader-elect, so
+  # exactly one manager holds the Lease and runs the reconcilers. Two is the
+  # default because one replica makes the Lease pointless — losing the node
+  # that ran it stops every reconciler until the pod is placed again, and the
+  # pods are kept apart (see the anti-affinity in the Deployment) so the
+  # standby does not share the node it stands by for.
+  replicas: 2
   # Empty by default: no resources block is rendered, so requests and limits are
   # opt-in. Idle usage (measured) is ~69Mi — keep a limit above that.
   resources: {}
