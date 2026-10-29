@@ -1442,11 +1442,12 @@ jobs:
           CANDIDATE_RESULT: ${{ needs.verify-release-candidate.result }}
           IS_RELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'release') }}
           IS_FULL_E2E: ${{ contains(github.event.pull_request.labels.*.name, 'full-e2e') }}
+          HAS_E2E_RUNNER: ${{ vars.RUNNER_XLARGE != '' || github.repository_owner == 'cozystack' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
           script: |
-            const { PLAN_RESULT, CODE, E2E_RESULT, CANDIDATE_RESULT, IS_RELEASE, IS_FULL_E2E, HEAD_SHA, RUN_URL } = process.env;
+            const { PLAN_RESULT, CODE, E2E_RESULT, CANDIDATE_RESULT, IS_RELEASE, IS_FULL_E2E, HAS_E2E_RUNNER, HEAD_SHA, RUN_URL } = process.env;
             let state, description;
             if (PLAN_RESULT !== 'success') {
               state = 'failure';
@@ -1454,6 +1455,15 @@ jobs:
             } else if (IS_RELEASE === 'true' && CANDIDATE_RESULT !== 'success') {
               state = 'failure';
               description = `release packages candidate did not verify (result: ${CANDIDATE_RESULT})`;
+            } else if (HAS_E2E_RUNNER !== 'true') {
+              // The suite boots QEMU guests that no hosted runner can hold, so
+              // the `e2e` job skips where no runner was configured for it. That
+              // skip is a fact about the repository, not about the change, and
+              // reporting it red would leave every pull request unmergeable with
+              // nothing to fix. Set the RUNNER_XLARGE variable to a real label to
+              // get the suite, and this gate, back.
+              state = 'success';
+              description = 'no e2e runner configured (set the RUNNER_XLARGE variable) — e2e not run';
             } else if (CODE !== 'true') {
               state = 'success';
               description = 'docs-only PR — e2e not required';
