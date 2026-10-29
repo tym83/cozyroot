@@ -28,8 +28,17 @@ bundle: {
 					operator: "Exists"
 					key:      "node.kubernetes.io/not-ready"
 				}, {
+					// Bounded on purpose. An unbounded toleration is never
+					// evicted, so the pod stays bound to a node nobody can
+					// reach and the Deployment, seeing its last reported
+					// status, makes no replacement: with one replica Flux
+					// would never come back from a lost node. The sibling
+					// not-ready toleration stays unbounded — a node without a
+					// network plugin is NotReady, and Flux is what installs
+					// the plugin.
 					operator:          "Exists"
 					key:               "node.kubernetes.io/unreachable"
+					tolerationSeconds: 60
 				}, {
 					operator:          "Exists"
 					key:               "node.cilium.io/agent-not-ready"
