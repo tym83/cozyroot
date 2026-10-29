@@ -241,6 +241,11 @@ spec:
       # and the operator is part of what installs one.
       - key: "node.kubernetes.io/unreachable"
         operator: "Exists"
+        # NoExecute is required beside tolerationSeconds, and is not a
+        # narrowing: the seconds only mean anything against the taint that
+        # evicts, and tolerating the scheduling half would only let the pod be
+        # placed on a node nobody can reach.
+        effect: "NoExecute"
         tolerationSeconds: 60
       - key: "node.cilium.io/agent-not-ready"
         operator: "Exists"
