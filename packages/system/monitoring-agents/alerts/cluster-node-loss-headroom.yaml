@@ -1,0 +1,61 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: alerts-cluster-node-loss-headroom
+spec:
+  groups:
+  - name: cluster-node-loss-headroom
+    params: {}
+    rules:
+    # Kubernetes reschedules the pods of a lost node onto the rest, and says
+    # nothing beforehand about whether they fit. On a small cluster they
+    # often do not: losing one node of three leaves the survivors carrying
+    # half as much again, and a cluster comfortable at eighty per cent is
+    # over its capacity the moment a node goes. The second node then evicts
+    # under pressure and takes the third with it.
+    #
+    # The comparison is total requests against the allocatable of every node
+    # but the largest. It is deliberately pessimistic: the pods of the lost
+    # node that belong to DaemonSets are not rescheduled at all, and they are
+    # counted here as though they were. It also compares by allocatable rather
+    # than by what each node currently carries, which is exact on a cluster of
+    # identical machines and approximate elsewhere.
+    #
+    # Nothing here is a limit. It is the warning that the cluster has stopped
+    # being able to lose a node, which is the moment to add one.
+    - alert: ClusterCannotLoseANodeMemory
+      annotations:
+        description: Pods request {{ $value | humanizePercentage }} of the memory the
+          cluster would still have after losing its largest node. Losing one now
+          would leave the survivors unable to place what moves to them.
+        summary: The cluster can no longer survive the loss of a node on memory.
+      expr: |-
+        sum(kube_pod_container_resource_requests{job="kube-state-metrics",resource="memory",node!=""})
+          /
+        (
+          sum(kube_node_status_allocatable{job="kube-state-metrics",resource="memory"})
+            -
+          max(kube_node_status_allocatable{job="kube-state-metrics",resource="memory"})
+        ) > 1
+      for: 15m
+      labels:
+        severity: warning
+        service: cluster-node-loss-headroom
+    - alert: ClusterCannotLoseANodeCPU
+      annotations:
+        description: Pods request {{ $value | humanizePercentage }} of the CPU the
+          cluster would still have after losing its largest node. Losing one now
+          would leave the survivors unable to place what moves to them.
+        summary: The cluster can no longer survive the loss of a node on CPU.
+      expr: |-
+        sum(kube_pod_container_resource_requests{job="kube-state-metrics",resource="cpu",node!=""})
+          /
+        (
+          sum(kube_node_status_allocatable{job="kube-state-metrics",resource="cpu"})
+            -
+          max(kube_node_status_allocatable{job="kube-state-metrics",resource="cpu"})
+        ) > 1
+      for: 15m
+      labels:
+        severity: warning
+        service: cluster-node-loss-headroom
