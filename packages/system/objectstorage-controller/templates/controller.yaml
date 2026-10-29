@@ -647,7 +647,7 @@ metadata:
   name: container-object-storage-controller
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.objectstorage.controller.replicas }}
   selector:
     matchLabels:
       app: container-object-storage-interface-controller
