@@ -1,5 +1,20 @@
 migrationController:
   image: "ghcr.io/cozystack/cozystack/migration-controller:latest"
+  # Where this controller may run. The platform threads these through
+  # spec.components.<name>.values of the Package, so a cluster can put the
+  # component on named nodes without the chart being edited in place.
+  # The tolerations are the chart's former hard-coded pair: a controller has to
+  # keep running on a cluster whose only schedulable nodes are control-plane
+  # ones. Replacing the list drops them, which is the point of it being a value.
+  nodeSelector: {}
+  affinity: {}
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
   replicas: 1
   debug: false
   metrics:

@@ -674,4 +674,16 @@ spec:
         - --v=5
         image: {{ .Values.objectstorage.controller.image }}
         name: objectstorage-controller
+      {{- with .Values.objectstorage.controller.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.objectstorage.controller.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.objectstorage.controller.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       serviceAccountName: container-object-storage-controller-sa
