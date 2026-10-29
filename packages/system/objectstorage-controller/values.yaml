@@ -1,11 +1,28 @@
 objectstorage:
   controller:
     image: "ghcr.io/cozystack/cozystack/objectstorage-controller:v1.6.0@sha256:9c284ef4f2fbbf5ee3ccd75f86ec6c993dc60aa673c6df3f9bd15d21a7e8485c"
+    # A standby, not a second writer: the controller takes a Lease, and the
+    # image carries a patch shortening it to the ordinary Kubernetes timings,
+    # so a standby takes over in about fifteen seconds. With one replica that
+    # Lease protects nothing — the wait is however long it takes to place the
+    # pod again.
+    replicas: 2
     # Where this controller may run. The platform threads these through
     # spec.components.<name>.values of the Package, so a cluster can put the
     # component on named nodes without the chart being edited in place.
-    # All three are empty by default, which is what the chart did before they
-    # existed: no node is ruled out and no taint is tolerated.
+    # The node selector and tolerations are empty, which is what the chart did
+    # before they existed: no node is ruled out and no taint is tolerated. The
+    # affinity keeps the standby off the node the leader is on, since one that
+    # shares it is lost with it; preferred, so a single-node cluster still
+    # places both.
     nodeSelector: {}
-    affinity: {}
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app: container-object-storage-interface-controller
+            topologyKey: kubernetes.io/hostname
     tolerations: []
