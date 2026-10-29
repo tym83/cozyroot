@@ -9,7 +9,7 @@ kind: Deployment
 metadata:
   name: incloud-web-gatekeeper
 spec:
-  replicas: 1
+  replicas: {{ .Values.gatekeeper.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/instance: incloud-web

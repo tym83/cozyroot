@@ -3,6 +3,14 @@
 _cluster: {}
 
 console:
+  # Both dashboard Deployments carry a preferred pod anti-affinity on
+  # kubernetes.io/hostname, which only spreads anything once more than one
+  # replica exists. The count was pinned at 1 in the template, so a single
+  # node failure took the dashboard with it; it is a value now, and two is
+  # the default on a multi-node cluster.
+  replicas: 2
   image: ghcr.io/cozystack/cozystack/cozystack-ui:v1.6.0@sha256:ad0e132ce506bbc9e0f6a5dfb94311c9bbc08da3d8eca84eb0e527ba6c1a8897
+gatekeeper:
+  replicas: 2
 tokenProxy:
   image: ghcr.io/cozystack/cozystack/token-proxy:v1.6.0@sha256:97124c012246c33cdcac60e8f884097b48c0081624716fe8161efc2b3ceeb2a8

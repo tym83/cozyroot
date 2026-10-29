@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: cozy-dashboard-console
 spec:
-  replicas: 1
+  replicas: {{ .Values.console.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/instance: cozy-dashboard
