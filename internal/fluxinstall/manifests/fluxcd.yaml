@@ -8279,6 +8279,7 @@ spec:
           operator: Exists
         - key: node.kubernetes.io/unreachable
           operator: Exists
+          tolerationSeconds: 60
         - key: node.cilium.io/agent-not-ready
           operator: Exists
         - key: node.cloudprovider.kubernetes.io/uninitialized
