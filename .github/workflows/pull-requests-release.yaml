@@ -29,7 +29,7 @@ jobs:
     # Runs skopeo + helm against GHCR (the promotion's registry side effects),
     # so it needs an ephemeral VM runner with those tools, not the self-hosted
     # pool.
-    runs-on: [oracle-vm-4cpu-16gb-x86-64]
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     permissions:
       contents: write
       packages: write

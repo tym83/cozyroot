@@ -61,7 +61,7 @@ permissions:
 jobs:
   build-line:
     name: Build ${{ github.ref_name }} images and packages artifact
-    runs-on: oracle-vm-24cpu-96gb-x86-64
+    runs-on: ${{ vars.RUNNER_LARGE || 'ubuntu-latest' }}
     timeout-minutes: 120
     permissions:
       contents: read

@@ -43,7 +43,7 @@ jobs:
     # build path no longer depends on that host (#2937 decommission). Serial
     # `make build` is CPU-bound, so use the large shape; the warmer is a
     # background main-push job, latency is not critical.
-    runs-on: oracle-vm-24cpu-96gb-x86-64
+    runs-on: ${{ vars.RUNNER_LARGE || 'ubuntu-latest' }}
     timeout-minutes: 120
     env:
       # The pipe falls back to direct on any proxy error (hack/common-envs.mk).

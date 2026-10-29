@@ -284,7 +284,7 @@ jobs:
   # required check rather than blocking e2e from starting.
   checks:
     name: Unit & controller tests
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
       # The pipe falls back to direct on any proxy error (hack/common-envs.mk).
@@ -396,7 +396,7 @@ jobs:
       needs.plan.outputs.code == 'true'
       && needs.plan.outputs.any == 'true'
       && !contains(github.event.pull_request.labels.*.name, 'release')
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -533,7 +533,7 @@ jobs:
         github.event.pull_request.head.repo.fork
         || needs.plan.outputs.talos == 'true'
       )
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -623,7 +623,7 @@ jobs:
       && needs.checks.result == 'success'
       && (needs.build.result == 'success' || needs.build.result == 'skipped')
       && (needs.build-talos.result == 'success' || needs.build-talos.result == 'skipped')
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -949,7 +949,7 @@ jobs:
     # systemReserved so the scheduler sees 8 CPU / 24 GiB. That corrects the
     # scheduler and not what a pod reads from /proc, so a workload that sizes
     # itself from /proc/cpuinfo or /proc/meminfo is configured for the whole host.
-    runs-on: oracle-vm-32cpu-128gb-x86-64
+    runs-on: ${{ vars.RUNNER_XLARGE || 'ubuntu-latest' }}
     # Covers a green full suite. It does not cover a tenant-Kubernetes suite
     # running into its node-join deadline, so a red there can end as a
     # cancelled job. Held to one figure across every lane that runs the suite.
