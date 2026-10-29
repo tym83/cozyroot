@@ -41,7 +41,7 @@ jobs:
     name: E2E (isp-hosted on kind)
     # The whole platform lands on one kind node with nothing pre-pulled. The
     # smaller 4-vCPU class was not tried; sizing down is left to a measured run.
-    runs-on: oracle-vm-24cpu-96gb-x86-64
+    runs-on: ${{ vars.RUNNER_LARGE || 'oracle-vm-24cpu-96gb-x86-64' }}
     # Above the failing path's sum, so the job ceiling never cuts off the
     # report: three prepare attempts at kind's 5m wait, the install's 30m
     # readiness gate plus its setup, and the 30m collect step.

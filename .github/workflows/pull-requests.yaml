@@ -1,8 +1,11 @@
 name: Pull Request
 
 env:
-  # TODO: unhardcode this
-  REGISTRY: iad.ocir.io/idyksih5sir9/cozystack
+  # Where the built images go. Unset, it is this repository's own namespace on
+  # the GitHub registry, which the built-in token can write to, so a fork
+  # builds images without being given any credentials. Upstream sets the
+  # REGISTRY and REGISTRY_HOST variables and keeps its OCIR secrets.
+  REGISTRY: ${{ vars.REGISTRY || format('ghcr.io/{0}', github.repository) }}
 on:
   pull_request:
     # `labeled` makes the promote PR's release-candidate verification and manual
@@ -284,7 +287,7 @@ jobs:
   # required check rather than blocking e2e from starting.
   checks:
     name: Unit & controller tests
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
       # The pipe falls back to direct on any proxy error (hack/common-envs.mk).
@@ -396,10 +399,11 @@ jobs:
       needs.plan.outputs.code == 'true'
       && needs.plan.outputs.any == 'true'
       && !contains(github.event.pull_request.labels.*.name, 'release')
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -421,13 +425,13 @@ jobs:
           if [ -d ~/.docker ]; then
             cp -r ~/.docker "${{ runner.temp }}/.docker"
           fi
-      - name: Login to GitHub Container Registry
+      - name: Login to the image registry
         if: ${{ !github.event.pull_request.head.repo.fork }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          username: ${{ secrets.OCIR_USER }}
-          password: ${{ secrets.OCIR_TOKEN }}
-          registry: iad.ocir.io
+          registry: ${{ vars.REGISTRY_HOST || 'ghcr.io' }}
+          username: ${{ vars.REGISTRY_HOST && secrets.OCIR_USER || github.actor }}
+          password: ${{ vars.REGISTRY_HOST && secrets.OCIR_TOKEN || secrets.GITHUB_TOKEN }}
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
       # docker-container driver: isolated buildkit per job (no shared-buildkit
@@ -533,10 +537,11 @@ jobs:
         github.event.pull_request.head.repo.fork
         || needs.plan.outputs.talos == 'true'
       )
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -548,13 +553,13 @@ jobs:
           if [ -d ~/.docker ]; then
             cp -r ~/.docker "${{ runner.temp }}/.docker"
           fi
-      - name: Login to GitHub Container Registry
+      - name: Login to the image registry
         if: ${{ !github.event.pull_request.head.repo.fork }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          username: ${{ secrets.OCIR_USER }}
-          password: ${{ secrets.OCIR_TOKEN }}
-          registry: iad.ocir.io
+          registry: ${{ vars.REGISTRY_HOST || 'ghcr.io' }}
+          username: ${{ vars.REGISTRY_HOST && secrets.OCIR_USER || github.actor }}
+          password: ${{ vars.REGISTRY_HOST && secrets.OCIR_TOKEN || secrets.GITHUB_TOKEN }}
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
       # buildkitd-config routes docker.io base-image pulls through mirror.gcr.io
@@ -623,10 +628,11 @@ jobs:
       && needs.checks.result == 'success'
       && (needs.build.result == 'success' || needs.build.result == 'skipped')
       && (needs.build-talos.result == 'success' || needs.build-talos.result == 'skipped')
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: read
+      packages: write
     steps:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -663,13 +669,13 @@ jobs:
           if [ -d ~/.docker ]; then
             cp -r ~/.docker "${{ runner.temp }}/.docker"
           fi
-      - name: Login to GitHub Container Registry
+      - name: Login to the image registry
         if: ${{ !github.event.pull_request.head.repo.fork }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          username: ${{ secrets.OCIR_USER }}
-          password: ${{ secrets.OCIR_TOKEN }}
-          registry: iad.ocir.io
+          registry: ${{ vars.REGISTRY_HOST || 'ghcr.io' }}
+          username: ${{ vars.REGISTRY_HOST && secrets.OCIR_USER || github.actor }}
+          password: ${{ vars.REGISTRY_HOST && secrets.OCIR_TOKEN || secrets.GITHUB_TOKEN }}
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
       # Overlay current-main image refs onto every package this PR did NOT
@@ -949,7 +955,7 @@ jobs:
     # systemReserved so the scheduler sees 8 CPU / 24 GiB. That corrects the
     # scheduler and not what a pod reads from /proc, so a workload that sizes
     # itself from /proc/cpuinfo or /proc/meminfo is configured for the whole host.
-    runs-on: oracle-vm-32cpu-128gb-x86-64
+    runs-on: ${{ vars.RUNNER_XLARGE || 'oracle-vm-32cpu-128gb-x86-64' }}
     # Covers a green full suite. It does not cover a tenant-Kubernetes suite
     # running into its node-join deadline, so a red there can end as a
     # cancelled job. Held to one figure across every lane that runs the suite.
@@ -971,6 +977,7 @@ jobs:
     if: |
       !cancelled()
       && !github.event.pull_request.head.repo.fork
+      && (vars.RUNNER_XLARGE != '' || github.repository_owner == 'cozystack')
       && (
         needs.finalize.result == 'success'
         || (
@@ -1435,11 +1442,12 @@ jobs:
           CANDIDATE_RESULT: ${{ needs.verify-release-candidate.result }}
           IS_RELEASE: ${{ contains(github.event.pull_request.labels.*.name, 'release') }}
           IS_FULL_E2E: ${{ contains(github.event.pull_request.labels.*.name, 'full-e2e') }}
+          HAS_E2E_RUNNER: ${{ vars.RUNNER_XLARGE != '' || github.repository_owner == 'cozystack' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
           script: |
-            const { PLAN_RESULT, CODE, E2E_RESULT, CANDIDATE_RESULT, IS_RELEASE, IS_FULL_E2E, HEAD_SHA, RUN_URL } = process.env;
+            const { PLAN_RESULT, CODE, E2E_RESULT, CANDIDATE_RESULT, IS_RELEASE, IS_FULL_E2E, HAS_E2E_RUNNER, HEAD_SHA, RUN_URL } = process.env;
             let state, description;
             if (PLAN_RESULT !== 'success') {
               state = 'failure';
@@ -1447,6 +1455,15 @@ jobs:
             } else if (IS_RELEASE === 'true' && CANDIDATE_RESULT !== 'success') {
               state = 'failure';
               description = `release packages candidate did not verify (result: ${CANDIDATE_RESULT})`;
+            } else if (HAS_E2E_RUNNER !== 'true') {
+              // The suite boots QEMU guests that no hosted runner can hold, so
+              // the `e2e` job skips where no runner was configured for it. That
+              // skip is a fact about the repository, not about the change, and
+              // reporting it red would leave every pull request unmergeable with
+              // nothing to fix. Set the RUNNER_XLARGE variable to a real label to
+              // get the suite, and this gate, back.
+              state = 'success';
+              description = 'no e2e runner configured (set the RUNNER_XLARGE variable) — e2e not run';
             } else if (CODE !== 'true') {
               state = 'success';
               description = 'docs-only PR — e2e not required';
