@@ -955,7 +955,7 @@ jobs:
     # systemReserved so the scheduler sees 8 CPU / 24 GiB. That corrects the
     # scheduler and not what a pod reads from /proc, so a workload that sizes
     # itself from /proc/cpuinfo or /proc/meminfo is configured for the whole host.
-    runs-on: ${{ vars.RUNNER_XLARGE || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNNER_XLARGE || 'oracle-vm-32cpu-128gb-x86-64' }}
     # Covers a green full suite. It does not cover a tenant-Kubernetes suite
     # running into its node-join deadline, so a red there can end as a
     # cancelled job. Held to one figure across every lane that runs the suite.
@@ -977,6 +977,7 @@ jobs:
     if: |
       !cancelled()
       && !github.event.pull_request.head.repo.fork
+      && (vars.RUNNER_XLARGE != '' || github.repository_owner == 'cozystack')
       && (
         needs.finalize.result == 'success'
         || (

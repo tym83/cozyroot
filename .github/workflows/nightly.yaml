@@ -246,7 +246,7 @@ jobs:
     # class has to be strictly larger, leaving the host its own cycles for
     # containerd and the runner agent. Enforced by
     # hack/sandbox-runner-headroom.bats.
-    runs-on: ${{ vars.RUNNER_XLARGE || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNNER_XLARGE || 'oracle-vm-32cpu-128gb-x86-64' }}
     # Covers a green full suite. It does not cover a tenant-Kubernetes suite
     # running into its node-join deadline, so a red there can end as a
     # cancelled job. Held to one figure across every lane that runs the suite.

@@ -18,10 +18,14 @@ the check neither passes nor fails, and the pull request stays unmergeable with
 no failure to read. The fallbacks mean a fresh clone has working CI on the
 first push.
 
-The fallbacks are not equivalent machines. A hosted runner has four cores, so
-the end-to-end suites are far slower there and may exhaust the disk; point
-`RUNNER_XLARGE` and `RUNNER_PROXMOX` at real hardware before relying on them.
-Builds and tests are fine as they are.
+Only the first two fall back to a hosted runner. The end-to-end suites boot
+QEMU guests that ask for more vCPU and memory than a hosted machine has, and
+`hack/sandbox-runner-headroom.bats` sizes each sandbox job from the class its
+`runs-on` names, so `RUNNER_XLARGE`, `RUNNER_LARGE` and `RUNNER_PROXMOX` keep
+the upstream class as their fallback rather than pretending a hosted runner
+would do. Where no such runner exists the pull-request e2e job is skipped
+instead of queueing for one that will never arrive; set `RUNNER_XLARGE` to a
+real label to turn it back on.
 
 Set a variable with:
 

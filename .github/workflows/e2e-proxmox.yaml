@@ -38,7 +38,7 @@ jobs:
     # cancels it, so the schedule fires only where the stand is declared;
     # manual dispatch always runs.
     if: github.event_name == 'workflow_dispatch' || vars.PROXMOX_NIGHTLY == 'true'
-    runs-on: ${{ vars.RUNNER_PROXMOX || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNNER_PROXMOX || 'self-hosted' }}
     timeout-minutes: 90
     env:
       COZY_PROXMOX_NS: tenant-e2eproxmox
