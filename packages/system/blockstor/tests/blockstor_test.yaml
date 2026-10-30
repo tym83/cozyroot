@@ -178,3 +178,17 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].securityContext.privileged
           value: true
+
+  # A host with a minimal userspace runs no udev and has no /run/udev. A strict
+  # hostPath type check turns that into a satellite that never starts, on every
+  # node, which is a worse answer than running with an empty database the host
+  # would not have filled anyway.
+  - it: starts on a host that runs no udev
+    template: templates/satellite.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[?(@.name=="run-udev")].hostPath.type
+          value: DirectoryOrCreate
