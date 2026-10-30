@@ -60,3 +60,31 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'is not a storage variant'
+
+  # The scheduler and the storage layer have to move together: an endpoint
+  # left pointing at a controller that is not deployed is a silent loss of
+  # volume locality, not an install failure.
+  - it: moves the volume-aware scheduler with the storage variant
+    values:
+      - ../values-isp-full.yaml
+    set:
+      storage:
+        variant: blockstor
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor-scheduler
+    asserts:
+      - equal:
+          path: spec.variant
+          value: blockstor
+
+  - it: leaves the scheduler on the default variant by default
+    values:
+      - ../values-isp-full.yaml
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor-scheduler
+    asserts:
+      - equal:
+          path: spec.variant
+          value: default

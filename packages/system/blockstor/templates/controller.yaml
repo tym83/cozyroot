@@ -3,7 +3,7 @@ Two reconcilers without a lease both drive the same DRBD layer: they would
 race on resource placement and on the finalizers that tear volumes down, and
 the damage lands on the disks rather than on the API. Refuse the combination
 at render time instead of shipping it.
-*/ -}}
+*/}}
 {{- if and (gt (int .Values.controller.replicas) 1) (not .Values.controller.leaderElect) }}
 {{- fail "controller.replicas > 1 requires controller.leaderElect: true -- without the lease every replica reconciles, and two reconcilers racing on the same DRBD resources corrupt placement" }}
 {{- end }}
@@ -16,7 +16,7 @@ metadata:
 {{- /*
 Cluster-wide read on the core API plus full write on the blockstor group. The
 reconcilers watch nothing outside that group, so the verb set stays narrow.
-*/ -}}
+*/}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

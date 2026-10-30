@@ -226,7 +226,12 @@ cozystack-scheduler (emitted with its own variant in both branches)
 {{include "cozystack.platform.package.full.default" (list "cozystack.cozy-proxy" $root) }}
 {{include "cozystack.platform.package.full.default" (list "cozystack.metallb" $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.reloader" $root) }}
-{{include "cozystack.platform.package.default" (list "cozystack.linstor-scheduler" $root) }}
+{{- /* The volume-aware scheduler asks the storage control plane where a
+       volume's replicas are, so it has to be told which one is running: the
+       endpoint and the client certificate differ between them, and neither
+       mistake fails the install -- the extender just never answers, and
+       volumes are placed blind. */ -}}
+{{include "cozystack.platform.package" (list "cozystack.linstor-scheduler" (dig "variant" "default" ($root.Values.storage | default dict) | toString) $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.snapshot-controller" $root) }}
 {{- /* securitygroup-controller maintains membership labels for CiliumNetworkPolicy-backed
        SecurityGroups, so it only makes sense where Cilium runs. Keeping it here with the

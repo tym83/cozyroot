@@ -66,3 +66,18 @@ tests:
     asserts:
       - notExists:
           path: spec.variants[?(@.name=="default")].components[?(@.name=="linstor")].valuesFiles
+
+  # The volume-aware scheduler asks the storage control plane where a volume's
+  # replicas are. Point it at the wrong endpoint, or hand it a certificate from
+  # the wrong CA, and nothing fails: the extender is simply never answered and
+  # volumes are placed without knowing where their data is.
+  - it: points the volume-aware scheduler at blockstor
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor-scheduler
+    asserts:
+      - contains:
+          path: spec.variants[?(@.name=="blockstor")].components[?(@.name=="linstor-scheduler")].valuesFiles
+          content: values-blockstor.yaml
+      - notExists:
+          path: spec.variants[?(@.name=="default")].components[?(@.name=="linstor-scheduler")].valuesFiles
