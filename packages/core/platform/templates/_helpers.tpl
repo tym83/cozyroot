@@ -118,13 +118,30 @@ on the slim ones. Takes the same arguments as cozystack.platform.package.
 
 {{/*
 Emits the cozystack.networking Package. Call as
-(list $ <components> <full variant> <slim variant>). The slim variants run Cilium
-alone: no KubeOVN component, and Cilium L2 announcements stand in for MetalLB.
+(list $ <components> <full variant> <slim variant> <cozyplane variant>). The slim
+variants run Cilium alone: no KubeOVN component, and Cilium L2 announcements stand
+in for MetalLB.
+
+networking.cni: cozyplane replaces both with an eBPF overlay that carries tenant
+VPCs without Open vSwitch, which is the only route to tenant networking on a
+kernel built without CONFIG_OPENVSWITCH. It takes none of the components
+assembled for the other two: the KubeOVN address plan and the Cilium values
+describe datapaths it does not run, and passing them through would configure
+nothing while looking as though it did.
 */}}
 {{- define "cozystack.platform.package.networking" -}}
 {{- $root := index . 0 -}}
 {{- $components := index . 1 -}}
 {{- $variant := index . 2 -}}
+{{- $cni := dig "cni" "cilium" ($root.Values.networking | default dict) | toString -}}
+{{- if eq $cni "cozyplane" -}}
+{{- if dig "encryption" "enabled" false ($root.Values.networking | default dict) -}}
+{{- fail "networking.encryption.enabled is not supported with networking.cni: cozyplane -- the KubeOVN IPsec switch it drives is not part of this datapath" -}}
+{{- end -}}
+{{- include "cozystack.platform.package" (list "cozystack.networking" (index . 4) $root (include "cozystack.platform.cozyplane.components" $root | fromYaml)) }}
+{{- else if ne $cni "cilium" -}}
+{{- fail (printf "networking.cni: %q is not a CNI this platform installs; use \"cilium\" or \"cozyplane\"" $cni) -}}
+{{- else -}}
 {{- if include "cozystack.platform.slim" $root -}}
 {{- if dig "encryption" "enabled" false ($root.Values.networking | default dict) -}}
 {{- fail "networking.encryption.enabled is not supported on the slim variants: their Cilium-only datapath has no encryption wiring yet" -}}
@@ -136,6 +153,30 @@ alone: no KubeOVN component, and Cilium L2 announcements stand in for MetalLB.
 {{- $_ := set $components "cilium" (dict "values" (dict "cilium" $cilium)) -}}
 {{- end -}}
 {{- include "cozystack.platform.package" (list "cozystack.networking" $variant $root $components) }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Emits the cozystack.cozyplane-api Package, which serves cozyplane's tenant
+group. It is noop on any other CNI, and on cozyplane only when tenancy is
+switched off: without it VPC, VPCBinding, SecurityGroup and HostFirewall have
+no CRDs anywhere and simply do not exist, so the cluster has the default pod
+network and the upstream NetworkPolicy on it and nothing more.
+*/}}
+{{- define "cozystack.platform.package.cozyplaneApi" -}}
+{{- $root := index . 0 -}}
+{{- $net := $root.Values.networking | default dict -}}
+{{- $variant := "noop" -}}
+{{- if eq (dig "cni" "cilium" $net | toString) "cozyplane" -}}
+{{- $variant = dig "cozyplane" "apiVariant" "noop" $net | toString -}}
+{{- if not (has $variant (list "noop" "default" "replicated-etcd")) -}}
+{{- fail (printf "networking.cozyplane.apiVariant: %q is not a variant of cozystack.cozyplane-api; use \"default\" for one etcd member on a replicated volume, \"replicated-etcd\" for three of its own, or \"noop\" to run without tenant networking" $variant) -}}
+{{- end -}}
+{{- if and (ne $variant "noop") (not (dig "cozyplane" "acknowledgeApiGroupTakeover" false $net)) -}}
+{{- fail "networking.cozyplane.apiVariant installs an aggregated API server for sdn.cozystack.io, and this platform already serves that group from cozystack-api, where SecurityGroup lives. The cozyplane server repoints the v1alpha1.sdn.cozystack.io APIService at itself on startup while the cozystack-api release keeps pointing it back, so the two fight over one object and every SecurityGroup in the cluster resolves to whichever won last -- a different schema, in a different store. Leave apiVariant at noop, which gives the pod network and the upstream NetworkPolicy on it without the tenant kinds, or set networking.cozyplane.acknowledgeApiGroupTakeover: true on a cluster where losing cozystack-api's SecurityGroup is intended." -}}
+{{- end -}}
+{{- end -}}
+{{- include "cozystack.platform.package" (list "cozystack.cozyplane-api" $variant $root dict) }}
 {{- end }}
 
 {{- define "cozystack.platform.package.full.default" -}}
@@ -226,7 +267,12 @@ cozystack-scheduler (emitted with its own variant in both branches)
 {{include "cozystack.platform.package.full.default" (list "cozystack.cozy-proxy" $root) }}
 {{include "cozystack.platform.package.full.default" (list "cozystack.metallb" $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.reloader" $root) }}
-{{include "cozystack.platform.package.default" (list "cozystack.linstor-scheduler" $root) }}
+{{- /* The volume-aware scheduler asks the storage control plane where a
+       volume's replicas are, so it has to be told which one is running: the
+       endpoint and the client certificate differ between them, and neither
+       mistake fails the install -- the extender just never answers, and
+       volumes are placed blind. */ -}}
+{{include "cozystack.platform.package" (list "cozystack.linstor-scheduler" (dig "variant" "default" ($root.Values.storage | default dict) | toString) $root) }}
 {{include "cozystack.platform.package.default" (list "cozystack.snapshot-controller" $root) }}
 {{- /* securitygroup-controller maintains membership labels for CiliumNetworkPolicy-backed
        SecurityGroups, so it only makes sense where Cilium runs. Keeping it here with the
@@ -284,4 +330,68 @@ sliced into /24s ever allowed.
 
 {{- define "cozystack.platform.ciliumPoolRange" -}}
 {{- join ".." (splitList " " (include "cozystack.platform.ciliumPoolBounds" .)) -}}
+{{- end }}
+
+{{/*
+Emits the storage Package, choosing between the bundled LINSTOR control plane
+and blockstor. Call as (list $ <components>).
+
+Switching the variant of a live Package deletes every HelmRelease the new one
+does not install, and there is no migration between the two stores: the
+resource records live in LINSTOR's own database on one side and in CRDs on the
+other, so a switch leaves the volumes on the disks with nothing describing
+them. The acknowledgement therefore names the target variant, so a value left
+set after one switch does not cover the next. Inert where lookup returns
+nothing: helm template, client-side dry-run, first install.
+*/}}
+{{- define "cozystack.platform.package.storage" -}}
+{{- $root := index . 0 -}}
+{{- $components := index . 1 -}}
+{{- $variant := dig "variant" "default" ($root.Values.storage | default dict) | toString -}}
+{{- if eq $variant "blockstor" -}}
+{{- $variant = "blockstor" -}}
+{{- else if ne $variant "default" -}}
+{{- fail (printf "storage.variant: %q is not a storage variant; use \"default\" for the bundled LINSTOR control plane or \"blockstor\"" $variant) -}}
+{{- end -}}
+{{- $live := lookup "cozystack.io/v1alpha1" "Package" "" "cozystack.linstor" -}}
+{{- if $live -}}
+{{- $liveVariant := default "default" (dig "spec" "variant" "" $live) -}}
+{{- $ack := dig "acknowledgeVariantChange" "" ($root.Values.storage | default dict) | toString -}}
+{{- if and (ne $liveVariant $variant) (ne $ack $variant) -}}
+{{- fail (printf "the live cozystack.linstor Package runs variant %q and this render would switch it to %q. The two keep their records in different stores -- LINSTOR's own database on one side, CRDs on the other -- and nothing migrates between them, so the switch leaves the volumes on the disks with nothing describing them and every PersistentVolume unusable. Either restore the previous storage.variant, or, on a cluster whose volumes are expendable or already migrated by hand, set storage.acknowledgeVariantChange: %q in the platform values to confirm this exact switch." $liveVariant $variant $variant) -}}
+{{- end -}}
+{{- end -}}
+{{- include "cozystack.platform.package" (list "cozystack.linstor" $variant $root $components) }}
+{{- end }}
+
+{{/*
+The address plan cozyplane needs, from the one the platform already declares.
+
+Three of its settings are facts about the cluster it cannot discover: the pod
+supernet it masquerades out of, the Service range it denies to tenants at
+their gateways, and the cluster DNS address, which is the one door a gateway
+opens so a tenant pod resolves with a stock resolv.conf. The chart defaults
+are a guess at all three, and a wrong guess here is not an error anywhere --
+it is pods with no return path off the cluster and tenants that cannot
+resolve, on a cluster that otherwise looks healthy. So they are threaded from
+the platform's own values rather than left to match by luck.
+*/}}
+{{- define "cozystack.platform.cozyplane.components" -}}
+{{- $net := .Values.networking | default dict -}}
+{{- $service := $net.serviceCIDR | toString -}}
+{{- $dns := $net.clusterDNS | default "" | toString -}}
+{{- if not $dns -}}
+{{- $base := first (splitList "/" $service) -}}
+{{- $octets := splitList "." $base -}}
+{{- if or (ne (len $octets) 4) (ne (last $octets) "0") -}}
+{{- fail (printf "networking.serviceCIDR is %q, whose base address does not end in .0, so the cluster DNS address cannot be derived from it; set networking.clusterDNS explicitly" $service) -}}
+{{- end -}}
+{{- $dns = printf "%s.%s.%s.10" (index $octets 0) (index $octets 1) (index $octets 2) -}}
+{{- end -}}
+cozyplane:
+  values:
+    egress:
+      clusterCIDR: {{ $net.podCIDR | toString | quote }}
+      serviceCIDR: {{ $service | quote }}
+      clusterDNS: {{ $dns | quote }}
 {{- end }}

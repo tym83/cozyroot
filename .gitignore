@@ -152,3 +152,7 @@ packages/core/platform/images/migrations/etcd-operator-crds/
 /srv1/
 /srv2/
 /srv3/
+
+# Python bytecode from the package test suites.
+__pycache__/
+*.py[cod]

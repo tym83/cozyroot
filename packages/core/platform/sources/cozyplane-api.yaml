@@ -1,0 +1,62 @@
+---
+# The aggregated API server for cozyplane's tenant group, sdn.cozystack.io.
+#
+# It is a separate package from the CNI because the two sit at opposite ends of
+# the install order. cozyplane is the CNI and goes in first, before
+# cert-manager, because nothing can be scheduled until it is up; this server
+# needs a cert-manager Certificate, an etcd and a StorageClass, all of which are
+# ordinary pods on the network cozyplane provides. One PackageSource cannot hold
+# both positions.
+#
+# Without it the cluster has the default pod network and the upstream
+# NetworkPolicy on it, and nothing else: VPC, VPCBinding, VPCGateway, Port,
+# SecurityGroup, FloatingIP and HostFirewall have no CRDs anywhere and are
+# served by this server alone. Tenant networking is therefore this package, not
+# an enhancement to it.
+apiVersion: cozystack.io/v1alpha1
+kind: PackageSource
+metadata:
+  name: cozystack.cozyplane-api
+spec:
+  sourceRef:
+    kind: OCIRepository
+    name: cozystack-packages
+    namespace: cozy-system
+    path: /
+  variants:
+  - name: noop
+    components: []
+  # One etcd member on a replicated volume rather than three on their own.
+  # Three members buy a quorum that survives losing one of them; one member on
+  # storage that replicates buys the same survival from the layer below, for a
+  # third of the memory and a third of the disks. On a cluster whose nodes have
+  # a few gigabytes each that trade is worth making, and the records here --
+  # the VPCs and their ports -- change rarely enough that a reschedule costs
+  # little.
+  - name: default
+    dependsOn:
+    - cozystack.cert-manager
+    - cozystack.linstor
+    components:
+    - name: cozyplane-apiserver
+      path: system/cozyplane-apiserver
+      valuesFiles:
+      - values.yaml
+      - values-single-etcd.yaml
+      install:
+        namespace: cozy-cozyplane
+        releaseName: cozyplane-apiserver
+  # Three etcd members through the etcd-operator, for a cluster with the memory
+  # to spend on a quorum of its own rather than borrowing one from the storage
+  # layer.
+  - name: replicated-etcd
+    dependsOn:
+    - cozystack.cert-manager
+    - cozystack.etcd-operator
+    - cozystack.linstor
+    components:
+    - name: cozyplane-apiserver
+      path: system/cozyplane-apiserver
+      install:
+        namespace: cozy-cozyplane
+        releaseName: cozyplane-apiserver

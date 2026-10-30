@@ -1,0 +1,87 @@
+suite: cozyplane PackageSource wiring
+templates:
+  - templates/sources.yaml
+release:
+  name: cozystack
+  namespace: cozy-system
+tests:
+  # The CNI installs before cert-manager and before everything that needs a
+  # scheduled pod, so the only thing it may wait for is a set of CRDs.
+  - it: the networking variants wait on nothing a pod has to provide
+    documentSelector:
+      path: metadata.name
+      value: cozystack.networking
+    asserts:
+      - equal:
+          path: spec.variants[?(@.name=="cozyplane")].name
+          value: cozyplane
+      - equal:
+          path: spec.variants[?(@.name=="cozyplane")].dependsOn[0]
+          value: cozystack.gateway-api-crds
+      - lengthEqual:
+          path: spec.variants[?(@.name=="cozyplane")].dependsOn
+          count: 1
+      - equal:
+          path: spec.variants[?(@.name=="cozyplane-generic")].name
+          value: cozyplane-generic
+
+  # The inert policy CRDs go first because charts across the tree embed
+  # CiliumNetworkPolicy objects and fail to install without them.
+  - it: installs the policy CRDs before the CNI
+    documentSelector:
+      path: metadata.name
+      value: cozystack.networking
+    asserts:
+      - equal:
+          path: spec.variants[?(@.name=="cozyplane")].components[0].name
+          value: cozyplane-cilium-crds
+      - equal:
+          path: spec.variants[?(@.name=="cozyplane")].components[1].install.dependsOn[0]
+          value: cozyplane-cilium-crds
+      - equal:
+          path: spec.variants[?(@.name=="cozyplane")].components[1].install.privileged
+          value: true
+
+  # values-talos.yaml points the agent at KubePrism on localhost, which exists
+  # only on Talos, so the generic variant must not carry it. Taking Services
+  # over from a working kube-proxy is a separate decision, so kpr is not there
+  # either.
+  - it: leaves the Talos values and the service proxy out of the generic variant
+    documentSelector:
+      path: metadata.name
+      value: cozystack.networking
+    asserts:
+      - equal:
+          path: spec.variants[?(@.name=="cozyplane-generic")].components[1].valuesFiles
+          value:
+            - values.yaml
+      - lengthEqual:
+          path: spec.variants[?(@.name=="cozyplane-generic")].components
+          count: 2
+
+  # The tenant API is the other end of the install order: it needs a
+  # certificate, an etcd and a volume, all of them pods on the network the CNI
+  # provides.
+  - it: sequences the tenant API after cert-manager and the storage layer
+    documentSelector:
+      path: metadata.name
+      value: cozystack.cozyplane-api
+    asserts:
+      - equal:
+          path: spec.variants[?(@.name=="noop")].name
+          value: noop
+      - equal:
+          path: spec.variants[?(@.name=="default")].name
+          value: default
+      - contains:
+          path: spec.variants[?(@.name=="default")].dependsOn
+          content: cozystack.cert-manager
+      - contains:
+          path: spec.variants[?(@.name=="default")].dependsOn
+          content: cozystack.linstor
+      - contains:
+          path: spec.variants[?(@.name=="default")].components[0].valuesFiles
+          content: values-single-etcd.yaml
+      - contains:
+          path: spec.variants[?(@.name=="replicated-etcd")].dependsOn
+          content: cozystack.etcd-operator

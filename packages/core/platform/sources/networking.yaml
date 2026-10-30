@@ -146,3 +146,75 @@ spec:
         releaseName: kubeovn
         dependsOn:
         - cilium
+  # cozyplane: the pod network on an eBPF Geneve overlay, with multi-tenant
+  # VPCs. It replaces KubeOVN without needing Open vSwitch in the kernel, which
+  # is what makes it the only route to tenant networking on a kernel built
+  # without CONFIG_OPENVSWITCH. No Cilium agent runs, so the cilium.io policy
+  # CRDs are installed inert: stock charts embed CiliumNetworkPolicy objects
+  # and fail to install when the CRDs are absent, and nothing enforces them
+  # here -- the enforced layers are the upstream NetworkPolicy on the default
+  # network and, once the aggregated API lands, SecurityGroup and HostFirewall.
+  #
+  # The aggregated API server is deliberately absent: it needs cert-manager, an
+  # etcd and a StorageClass, all of which are default-network pods that cannot
+  # be scheduled until this package is up. It ships as cozystack.cozyplane-api,
+  # sequenced after the storage layer.
+  - name: cozyplane
+    dependsOn:
+    - cozystack.gateway-api-crds
+    components:
+    - name: cozyplane-cilium-crds
+      path: system/cozyplane-cilium-crds
+      install:
+        namespace: cozy-system
+        releaseName: cozyplane-cilium-crds
+    - name: cozyplane
+      path: system/cozyplane
+      valuesFiles:
+      - values.yaml
+      - values-talos.yaml
+      install:
+        privileged: true
+        namespace: cozy-cozyplane
+        releaseName: cozyplane
+        upgradeCRDs: CreateReplace
+        dependsOn:
+        - cozyplane-cilium-crds
+    - name: cozyplane-kpr
+      path: system/cozyplane-kpr
+      valuesFiles:
+      - values.yaml
+      - values-talos.yaml
+      install:
+        privileged: true
+        namespace: cozy-cozyplane
+        releaseName: cozyplane-kpr
+        dependsOn:
+        - cozyplane
+  # The same on a substrate that is not Talos. values-talos.yaml is left out,
+  # not emptied: it points the agent at KubePrism on localhost, which exists
+  # only on Talos, and it renames the CNI configuration file. Off Talos the
+  # agent reaches the API through the in-cluster Service, which works because
+  # the node already runs a service proxy -- and that is also why kpr is not
+  # part of this variant: taking over Services from a working kube-proxy is a
+  # separate decision from changing the CNI.
+  - name: cozyplane-generic
+    dependsOn:
+    - cozystack.gateway-api-crds
+    components:
+    - name: cozyplane-cilium-crds
+      path: system/cozyplane-cilium-crds
+      install:
+        namespace: cozy-system
+        releaseName: cozyplane-cilium-crds
+    - name: cozyplane
+      path: system/cozyplane
+      valuesFiles:
+      - values.yaml
+      install:
+        privileged: true
+        namespace: cozy-cozyplane
+        releaseName: cozyplane
+        upgradeCRDs: CreateReplace
+        dependsOn:
+        - cozyplane-cilium-crds

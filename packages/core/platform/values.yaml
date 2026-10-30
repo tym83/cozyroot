@@ -83,6 +83,41 @@ bundles:
   enabledPackages: []
 # Network configuration
 networking:
+  # Which pod network the platform installs.
+  #
+  # "cilium" is the default and covers both the Cilium-only datapath of the
+  # slim variants and the KubeOVN one of the full variants.
+  #
+  # "cozyplane" replaces both with an eBPF Geneve overlay that carries tenant
+  # VPCs without Open vSwitch, so tenant networking becomes possible on a
+  # kernel built without CONFIG_OPENVSWITCH. No Cilium agent runs under it, and
+  # the cilium.io policy CRDs are installed inert only so that stock charts
+  # embedding CiliumNetworkPolicy objects still install; what is enforced is
+  # the upstream NetworkPolicy on the default network, plus SecurityGroup and
+  # HostFirewall once the tenant API below is on.
+  cni: cilium
+  cozyplane:
+    # Where cozyplane keeps its tenant records, and whether it keeps any.
+    #
+    # The tenant kinds -- VPC, VPCBinding, VPCGateway, Port, SecurityGroup,
+    # FloatingIP, HostFirewall -- have no CRDs anywhere; they are served by an
+    # aggregated API server alone. "noop" therefore does not mean tenancy with
+    # fewer features, it means no tenancy at all: the cluster gets the default
+    # pod network and the upstream NetworkPolicy on it and nothing more.
+    #
+    # "default" runs one etcd member on a replicated volume, which survives
+    # losing its node through the storage layer rather than through a quorum.
+    # "replicated-etcd" runs three of its own through the etcd-operator, for a
+    # cluster with the memory to spend on that.
+    #
+    # The default is noop, and not because tenancy is optional. That server
+    # serves sdn.cozystack.io, which this platform already serves from
+    # cozystack-api, where SecurityGroup lives -- and it repoints the group's
+    # APIService at itself on startup while the cozystack-api release points it
+    # back. Turning it on therefore needs the acknowledgement below, which says
+    # that losing cozystack-api's SecurityGroup is what was meant.
+    apiVariant: noop
+    acknowledgeApiGroupTakeover: false
   clusterDomain: "cozy.local"
   # On the kube-ovn variants the last /21 of podCIDR is reserved for Cilium's
   # own router and Gateway API Ingress addresses and excluded from kube-ovn
@@ -91,6 +126,12 @@ networking:
   podCIDR: "10.244.0.0/16"
   podGateway: "10.244.0.1"
   serviceCIDR: "10.96.0.0/16"
+  # The cluster DNS address. Empty derives it from serviceCIDR the way every
+  # installer does, as its tenth address. It is named here because cozyplane
+  # has to be told it: a VPC gateway opens that one address so a tenant pod
+  # resolves with a stock resolv.conf, and a wrong value is not an error, just
+  # tenants that cannot resolve.
+  clusterDNS: ""
   joinCIDR: "100.64.0.0/16"
   # KubeOVN master nodes override (optional)
   # By default, KubeOVN helm chart uses `lookup` to find control-plane nodes
@@ -935,3 +976,19 @@ vmImport:
   # top-level `migrations` key above, which is the platform's own schema
   # migrations and has nothing to do with moving virtual machines.
   vddkImage: ""
+
+## Which storage control plane the platform runs.
+##
+## "default" is the bundled LINSTOR, whose controller is a JVM sized from the
+## machine's memory. "blockstor" keeps the same REST API and the same CSI
+## driver but replaces that controller and its satellites with Go binaries,
+## which is what makes storage fit on a node with a few gigabytes.
+##
+## The two keep their records in different stores and nothing migrates between
+## them, so changing this on a cluster that already holds volumes needs
+## acknowledgeVariantChange set to the variant being switched to -- and that
+## acknowledgement is a statement that the volumes are expendable or have
+## already been moved by hand.
+storage:
+  variant: default
+  acknowledgeVariantChange: ""

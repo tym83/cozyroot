@@ -1,0 +1,96 @@
+# Running against blockstor keeps the client side of piraeus -- linstor-csi is
+# what turns a PVC into a replicated volume -- and drops everything blockstor
+# already provides. Each of these is load-bearing rather than tidy: a surviving
+# LINSTOR controller is the JVM this mode exists to remove, and a surviving
+# satellite renders .res files for the same resources blockstor's agent
+# renders, which makes drbdadm refuse every operation on them.
+suite: storage against an external controller
+templates:
+  - templates/cluster.yaml
+  - templates/satellites-cozy.yaml
+  - templates/satellites-plunger.yaml
+  - templates/satellites-reloader.yaml
+  - templates/satellites-talos.yaml
+  - templates/linstor-internal-tls.yaml
+  - templates/linstor-api-tls.yaml
+  - templates/plunger/configmap-scripts.yaml
+release:
+  name: linstor
+  namespace: cozy-linstor
+tests:
+  - it: deploys no LINSTOR controller
+    template: templates/cluster.yaml
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - notExists:
+          path: spec.controller
+
+  - it: renders no satellite configuration and no controller-side plumbing
+    templates:
+      - templates/satellites-cozy.yaml
+      - templates/satellites-plunger.yaml
+      - templates/satellites-reloader.yaml
+      - templates/satellites-talos.yaml
+      - templates/plunger/configmap-scripts.yaml
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: names the external API and the CA its clients are issued from
+    template: templates/cluster.yaml
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - equal:
+          path: spec.externalController.url
+          value: https://blockstor-apiserver.cozy-linstor.svc:3371
+      - equal:
+          path: spec.apiTLS.certManager.name
+          value: blockstor-api-ca
+
+  # The node selector on a LinstorCluster governs satellites alone, so it is
+  # the switch that leaves one agent per node without touching the CSI driver.
+  - it: selects satellite nodes by a label nothing carries
+    template: templates/cluster.yaml
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - equal:
+          path: spec.nodeSelector["piraeus.io/satellite"]
+          value: provided-by-blockstor
+      - exists:
+          path: spec.csiController
+      - exists:
+          path: spec.csiNode
+
+  # The internal TLS chain exists for the controller-to-satellite traffic that
+  # no longer happens here; the API chain is replaced by blockstor's own.
+  - it: issues neither of the chart's own certificate chains
+    templates:
+      - templates/linstor-internal-tls.yaml
+      - templates/linstor-api-tls.yaml
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: keeps the bundled controller when the mode is off
+    template: templates/cluster.yaml
+    asserts:
+      - equal:
+          path: spec.controller.enabled
+          value: true
+      - notExists:
+          path: spec.externalController
+      - notExists:
+          path: spec.nodeSelector
+      - equal:
+          path: spec.apiTLS.certManager.name
+          value: linstor-api-ca
+      - equal:
+          path: spec.internalTLS.certManager.name
+          value: linstor-internal-ca

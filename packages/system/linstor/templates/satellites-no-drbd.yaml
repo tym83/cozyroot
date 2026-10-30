@@ -1,3 +1,4 @@
+{{- if not .Values.externalController.enabled }}
 {{- if not .Values.drbd.enabled }}
 {{- if not .Values.talos.enabled }}
 {{- /* Turning DRBD off removes the drbd-logger sidecar below, and nothing else.
@@ -38,4 +39,5 @@ spec:
             containers:
             - name: drbd-logger
               $patch: delete
+{{- end }}
 {{- end }}

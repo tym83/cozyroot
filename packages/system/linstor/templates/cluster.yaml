@@ -1,3 +1,5 @@
+{{- $external := .Values.externalController.enabled -}}
+{{- $externalURL := .Values.externalController.url | default (printf "https://blockstor-apiserver.%s.svc:3371" .Release.Namespace) -}}
 apiVersion: piraeus.io/v1
 kind: LinstorCluster
 metadata:
@@ -5,15 +7,34 @@ metadata:
   labels:
     platform.cozystack.io/no-delete: "true"
 spec:
+{{- if $external }}
+  {{- /* Naming an external controller is what stops the operator deploying
+         its own, and re-renders linstor-csi against this URL. */}}
+  externalController:
+    url: {{ $externalURL | quote }}
+  {{- /* On a LinstorCluster the node selector governs satellites and nothing
+         else, so this leaves the CSI components alone while blockstor's own
+         agent becomes the only one on each node. Two agents rendering .res
+         files for one resource make drbdadm refuse every operation on it. */}}
+  nodeSelector:
+    {{- toYaml .Values.externalController.satelliteNodeSelector | nindent 4 }}
+{{- else }}
   #nodeSelector:
   #  node-role.kubernetes.io/linstor: ""
   internalTLS:
     certManager:
       name: linstor-internal-ca
       kind: Issuer
+{{- end }}
   apiTLS:
     certManager:
+{{- if $external }}
+      {{- /* The CSI driver has to present a certificate from the CA the
+             external API verifies clients against, not from this chart's own. */}}
+      name: {{ .Values.externalController.caIssuer }}
+{{- else }}
       name: linstor-api-ca
+{{- end }}
       kind: Issuer
   properties:
   {{- if .Values.linstor.autoDiskful.enabled }}
@@ -32,6 +53,7 @@ spec:
     value: "20"
   - name: DrbdOptions/Net/timeout
     value: "100"
+{{- if not $external }}
   controller:
     enabled: true
     podTemplate:
@@ -74,6 +96,7 @@ spec:
           configMap:
             name: linstor-plunger
             defaultMode: 0755
+{{- end }}
   csiController:
     podTemplate:
       spec:

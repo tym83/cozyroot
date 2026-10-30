@@ -1,0 +1,75 @@
+## Images are published by the upstream project on every version tag, as
+## linux/amd64 + linux/arm64 indexes, so a node of either architecture runs
+## them. They are referenced by tag here rather than mirrored into the
+## Cozystack registry: blockstor is an independent release train, and pinning a
+## digest would make every upstream patch release a change to this chart.
+images:
+  registry: ghcr.io/cozystack
+  tag: v0.1.17
+  pullPolicy: IfNotPresent
+
+controller:
+  ## The reconcilers. Leader election is on and two replicas are the default so
+  ## losing the node running the leader costs the lease duration rather than
+  ## the next reconcile: the control plane owns the DRBD layer, and a cluster
+  ## that cannot reconcile storage cannot recover a replica it just lost. The
+  ## standby holds no state -- desired state lives in the CRDs.
+  replicas: 2
+  leaderElect: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+apiserver:
+  ## The LINSTOR-compatible REST front end, stateless over the CRD store, so
+  ## replicas are genuinely active-active rather than a standby: reads are
+  ## served by any of them and writes go through with optimistic concurrency on
+  ## resourceVersion. This is what linstor-csi, piraeus and the linstor client
+  ## talk to.
+  replicas: 3
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+satellite:
+  ## The per-node agent that drives DRBD, LVM, ZFS and LUKS. Privileged,
+  ## hostNetwork and hostPID, because it shells out to drbdadm, lvs, zfs and
+  ## cryptsetup against the host kernel.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  ## Where the satellite runs. The default places one on every node that will
+  ## take it, including control-plane nodes: on a small cluster those are the
+  ## only nodes there are, and a node with no backing device simply registers
+  ## no storage pool rather than failing. Set an affinity here to keep storage
+  ## off the control plane on a cluster large enough to separate them.
+  nodeSelector: {}
+  affinity: {}
+  tolerations:
+    - operator: Exists
+
+tls:
+  ## The mutual-TLS chain the apiserver serves and verifies clients against.
+  ## cert-manager rotates these in place and the apiserver re-reads them from
+  ## disk, so no reloader annotations are wanted anywhere in this chart.
+  caDuration: 87600h
+  certDuration: 2160h
+  renewBefore: 360h
+
+## DNS suffix of the Kubernetes cluster, used for the Service SANs on the
+## apiserver's serving certificate. Empty takes the platform's own value; the
+## fallback matches what the rest of the platform assumes when nothing else
+## says otherwise.
+clusterDomain: ""
