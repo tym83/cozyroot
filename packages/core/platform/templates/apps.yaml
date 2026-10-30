@@ -23,6 +23,15 @@ stringData:
     keda:
       clusterDomain: {{ .Values.networking.clusterDomain | quote }}
     {{- /*
+      mariadb-operator.clusterName: the vendored operator builds the FQDN of
+      every MariaDB member from it, and it is a subchart value, so _cluster
+      cannot reach it either. Shipped as cozy.local in the package, which is
+      wrong on any cluster that kept kubeadm's cluster.local: the members then
+      resolve nothing and a MariaDB cluster never forms.
+    */}}
+    mariadb-operator:
+      clusterName: {{ .Values.networking.clusterDomain | quote }}
+    {{- /*
       The operator builds every in-cluster name it needs from DNS_BASE: the
       securityconfig job target, its own OpenSearch API client URL, the
       Dashboards host, and the SANs it writes into node certificates. This is

@@ -110,15 +110,25 @@
   bare host, so the trimPrefix pair is belt-and-suspenders and never fires
   today — kept as insurance against a future producer that emits a scheme.
 */}}
+{{/*
+  The in-cluster SeaweedFS endpoint, built from the cluster domain the
+  platform published rather than from a literal. A chart that spells the
+  domain out works only where that domain happens to be cozy.local.
+*/}}
+{{- define "backupstrategy-controller.defaultEndpoint" -}}
+{{- $domain := index (.Values._cluster | default dict) "cluster-domain" | default "cozy.local" -}}
+{{- printf "http://seaweedfs-s3.tenant-root.svc.%s:8333" $domain -}}
+{{- end -}}
+
 {{- define "backupstrategy-controller.endpoint" -}}
 {{- if not .Values.backupStorage.provisionBucket -}}
-{{- .Values.backupStorage.endpoint -}}
+{{- .Values.backupStorage.endpoint | default (include "backupstrategy-controller.defaultEndpoint" .) -}}
 {{- else -}}
 {{- $secret := lookup "v1" "Secret" .Values.backupStorage.namespace .Values.backupStorage.systemSecretName -}}
 {{- if and $secret $secret.data (index $secret.data "endpoint") -}}
 {{- printf "https://%s" (b64dec (index $secret.data "endpoint") | trim | trimPrefix "https://" | trimPrefix "http://") -}}
 {{- else -}}
-{{- .Values.backupStorage.endpoint -}}
+{{- .Values.backupStorage.endpoint | default (include "backupstrategy-controller.defaultEndpoint" .) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

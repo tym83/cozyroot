@@ -31,9 +31,12 @@ jobs:
     name: Require API owner review for sizeable API changes
     runs-on: ubuntu-22.04
     env:
-      # Space-separated GitHub logins allowed to satisfy the gate. Edit here to
-      # change who can approve sizeable API changes.
-      API_OWNERS: "lllamnyp kvaps"
+      # Space-separated GitHub logins allowed to satisfy the gate. A fork has
+      # different owners and cannot be approved by this repository's, so the
+      # list comes from the API_OWNERS repository variable where one is set,
+      # and falls back to the owners here. Without that fallback a fork's every
+      # API change is blocked on people who cannot review it.
+      API_OWNERS: ${{ vars.API_OWNERS || 'lllamnyp kvaps' }}
       BASE_REF: ${{ github.event.pull_request.base.ref }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       PR_NUMBER: ${{ github.event.pull_request.number }}

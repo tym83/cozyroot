@@ -48,3 +48,19 @@ and push to this repository's namespace on the GitHub registry, so a fork
 builds images without being handed any credentials. Setting `REGISTRY_HOST`
 switches the login to the `OCIR_USER` and `OCIR_TOKEN` secrets, which is how
 upstream reaches its own registry.
+
+# Reviewers
+
+The API review gate asks for an approving review from one of a fixed set of
+logins before it lets a sizeable API change through — a new group, a new
+resource, or a breaking schema change. Those logins are this repository's
+maintainers, and nobody else can satisfy the check:
+
+| Variable      | Falls back to      | Used by               |
+|---------------|--------------------|-----------------------|
+| `API_OWNERS`  | `lllamnyp kvaps`   | the API review gate   |
+
+A fork has its own maintainers, so without the variable its every API change
+waits on an approval from people who have no reason to give one and, in a
+private fork, no way to. Set `API_OWNERS` to a space-separated list of the
+logins that should be able to approve one.
