@@ -36,8 +36,15 @@ bundle: {
 					// not-ready toleration stays unbounded — a node without a
 					// network plugin is NotReady, and Flux is what installs
 					// the plugin.
-					operator:          "Exists"
-					key:               "node.kubernetes.io/unreachable"
+					operator: "Exists"
+					key:      "node.kubernetes.io/unreachable"
+					// NoExecute is not a narrowing: tolerationSeconds is only
+					// meaningful against the taint that evicts, and the API
+					// refuses the pair without it. The node controller applies
+					// this taint with both effects; tolerating only NoExecute
+					// also keeps the pod from being placed on a node nobody
+					// can reach, which is what we want anyway.
+					effect:            "NoExecute"
 					tolerationSeconds: 60
 				}, {
 					operator:          "Exists"
