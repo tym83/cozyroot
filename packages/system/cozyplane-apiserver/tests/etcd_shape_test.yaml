@@ -1,0 +1,64 @@
+# The tenant records this server holds -- VPCs, their ports, the policies on
+# them -- are cluster state, and the two shapes it can keep them in survive the
+# loss of a node for different reasons. Three members survive it with a quorum;
+# one member on a replicated volume survives it because the volume has another
+# copy. Both are deliberate, so the suite pins which values produce which.
+suite: where the tenant records are kept
+release:
+  name: cozyplane-apiserver
+  namespace: cozy-cozyplane
+tests:
+  - it: hands the records to the operator when asked for a quorum of its own
+    template: templates/etcd-cluster.yaml
+    set:
+      etcd:
+        operator:
+          enabled: true
+          replicas: 3
+    documentSelector:
+      path: kind
+      value: EtcdCluster
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: asks the operator for nothing in the single-member shape
+    template: templates/etcd-cluster.yaml
+    values:
+      - ../values-single-etcd.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: keeps the single member on a replicated volume
+    template: templates/apiserver.yaml
+    values:
+      - ../values-single-etcd.yaml
+    documentSelector:
+      path: kind
+      value: PersistentVolumeClaim
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: replicated
+
+  # A memory-backed store loses every VPC on a full-cluster restart, which is
+  # what a power cut is, and the cluster comes back with a datapath that
+  # nothing describes.
+  - it: never keeps the single member in memory
+    template: templates/apiserver.yaml
+    values:
+      - ../values-single-etcd.yaml
+    documentSelector:
+      path: spec.template.spec.volumes[0].name
+      value: data
+    asserts:
+      - equal:
+          path: metadata.name
+          value: cozyplane-etcd
+      - notExists:
+          path: spec.template.spec.volumes[0].emptyDir
+      - equal:
+          path: spec.template.spec.volumes[0].persistentVolumeClaim.claimName
+          value: cozyplane-etcd-data

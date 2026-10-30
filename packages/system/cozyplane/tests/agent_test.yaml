@@ -1,0 +1,62 @@
+# The address plan is the part of this chart that cannot be discovered and does
+# not fail loudly when wrong: a pod with the wrong cluster CIDR simply has no
+# return path off the cluster, and a tenant with the wrong DNS address simply
+# does not resolve. Both look like a healthy cluster. So the wiring from values
+# to agent arguments is what this suite pins.
+suite: cozyplane agent
+templates:
+  - templates/agent.yaml
+  - templates/crds.yaml
+release:
+  name: cozyplane
+  namespace: cozy-cozyplane
+tests:
+  - it: hands the agent the address plan it is given
+    template: templates/agent.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    set:
+      egress:
+        clusterCIDR: 10.200.0.0/16
+        serviceCIDR: 10.201.0.0/16
+        clusterDNS: 10.201.0.10
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--cluster-cidr=10.200.0.0/16"
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "--internal-cidrs=10.200.0.0/16,10.201.0.0/16"
+
+  # Under hostNetwork the container's hostname is the node's, which is what the
+  # datapath keys its own identity on, and the pod address is the node address
+  # peers reach it at.
+  - it: runs the agent on the host network
+    template: templates/agent.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: system-node-critical
+
+  # This is the only CRD the chart ships. The tenant kinds are served by the
+  # aggregated API server alone, and a CRD for one of them here would collide
+  # with its APIService in the kube-apiserver's OpenAPI merge -- which breaks
+  # kubectl apply for every object in the group, not just that kind.
+  - it: ships the underlay address CRD and no tenant kind
+    template: templates/crds.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: fabricips.local.sdn.cozystack.io
+      - equal:
+          path: spec.group
+          value: local.sdn.cozystack.io

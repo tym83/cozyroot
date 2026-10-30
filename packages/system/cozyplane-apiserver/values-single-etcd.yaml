@@ -1,0 +1,22 @@
+# One etcd member on a replicated volume instead of three on their own.
+#
+# Three members survive losing one because the remaining two still hold a
+# quorum. One member on storage that replicates survives the same loss for a
+# different reason: the volume has another copy, so the pod reschedules and
+# finds its data. The second shape costs a third of the memory and a third of
+# the disks, which is what makes it the right one on nodes with a few
+# gigabytes each.
+#
+# What it does not survive is the window while the pod moves: the tenant API is
+# unavailable until it comes back. That is acceptable here because the records
+# it holds -- VPCs and their ports -- change rarely, and the datapath already
+# programmed into the agents keeps running while the API is down.
+etcd:
+  operator:
+    enabled: false
+  persistence:
+    enabled: true
+    # The platform's replicated class. A local one would pin the API to the
+    # node that first scheduled it, which is the failure this shape exists to
+    # avoid.
+    storageClassName: replicated
