@@ -242,9 +242,19 @@ spec:
             path: /run/lvm
             type: DirectoryOrCreate
         - name: run-udev
+          {{- /*
+          DirectoryOrCreate, not Directory: a host that runs no udev has no
+          /run/udev at all, and a strict type check turns that into a pod that
+          never starts rather than one that works with less information. The
+          database is what lets libblkid and libzfs read partition metadata
+          after a pool is written, and a host without udev has none of it to
+          read either way -- so the strict check buys nothing it does not
+          already cost. Distributions with a minimal userspace are the normal
+          case here, not the exception.
+          */}}
           hostPath:
             path: /run/udev
-            type: Directory
+            type: DirectoryOrCreate
         - name: state
           hostPath:
             path: /var/lib/blockstor-satellite
