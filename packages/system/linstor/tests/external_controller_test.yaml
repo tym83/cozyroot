@@ -51,8 +51,7 @@ tests:
           path: spec.apiTLS.certManager.name
           value: blockstor-api-ca
 
-  # The node selector on a LinstorCluster governs satellites alone, so it is
-  # the switch that leaves one agent per node without touching the CSI driver.
+  # The node selector is how the satellites are switched off.
   - it: selects satellite nodes by a label nothing carries
     template: templates/cluster.yaml
     values:
@@ -65,6 +64,62 @@ tests:
           path: spec.csiController
       - exists:
           path: spec.csiNode
+
+  # The CRD says that selector chooses the nodes satellites run on. It also
+  # reaches the CSI driver, the affinity controller and the NFS server -- the
+  # parts of piraeus this mode exists to keep. Nothing reports an error when
+  # they vanish: the driver is simply never scheduled, and every volume stays
+  # Pending with "no node has enough free storage", which reads like a storage
+  # problem and is not one. So each is named here, and a rename upstream fails
+  # this suite rather than the next install.
+  - it: takes the selector back off everything that is not a satellite
+    template: templates/cluster.yaml
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - contains:
+          path: spec.patches
+          content:
+            target:
+              kind: Deployment
+              name: linstor-csi-controller
+            patch: |-
+              - op: remove
+                path: /spec/template/spec/nodeSelector
+      - contains:
+          path: spec.patches
+          content:
+            target:
+              kind: DaemonSet
+              name: linstor-csi-node
+            patch: |-
+              - op: remove
+                path: /spec/template/spec/nodeSelector
+      - contains:
+          path: spec.patches
+          content:
+            target:
+              kind: Deployment
+              name: linstor-affinity-controller
+            patch: |-
+              - op: remove
+                path: /spec/template/spec/nodeSelector
+
+  # The default variant deploys the satellites itself and sets no selector, so
+  # it must not carry these patches either -- removing a key that is not there
+  # fails the kustomize build.
+  - it: adds no such patch when the bundled controller runs
+    template: templates/cluster.yaml
+    asserts:
+      - notContains:
+          path: spec.patches
+          content:
+            target:
+              kind: Deployment
+              name: linstor-csi-controller
+            patch: |-
+              - op: remove
+                path: /spec/template/spec/nodeSelector
 
   # The internal TLS chain exists for the controller-to-satellite traffic that
   # no longer happens here; the API chain is replaced by blockstor's own.

@@ -12,10 +12,16 @@ spec:
          its own, and re-renders linstor-csi against this URL. */}}
   externalController:
     url: {{ $externalURL | quote }}
-  {{- /* On a LinstorCluster the node selector governs satellites and nothing
-         else, so this leaves the CSI components alone while blockstor's own
-         agent becomes the only one on each node. Two agents rendering .res
-         files for one resource make drbdadm refuse every operation on it. */}}
+  {{- /* The node selector is how the satellites are switched off: blockstor
+         ships its own agent, and two agents rendering .res files for one
+         resource make drbdadm refuse every operation on it.
+
+         The CRD says the selector chooses the nodes satellites run on. It
+         also reaches the CSI driver, the affinity controller and the NFS
+         server, which are the parts of piraeus this mode exists to keep --
+         and nothing reports an error when they vanish: volumes simply stay
+         Pending because no node is said to have storage. The patches below
+         take the selector back off them. */}}
   nodeSelector:
     {{- toYaml .Values.externalController.satelliteNodeSelector | nindent 4 }}
 {{- else }}
@@ -146,6 +152,32 @@ spec:
         - name: linstor-csi
           image: {{ .Values.linstorCSI.image.repository }}:{{ .Values.linstorCSI.image.tag }}
   patches:
+{{- if $external }}
+    - target:
+        kind: Deployment
+        name: linstor-csi-controller
+      patch: |-
+        - op: remove
+          path: /spec/template/spec/nodeSelector
+    - target:
+        kind: DaemonSet
+        name: linstor-csi-node
+      patch: |-
+        - op: remove
+          path: /spec/template/spec/nodeSelector
+    - target:
+        kind: Deployment
+        name: linstor-affinity-controller
+      patch: |-
+        - op: remove
+          path: /spec/template/spec/nodeSelector
+    - target:
+        kind: DaemonSet
+        name: linstor-csi-nfs-server
+      patch: |-
+        - op: remove
+          path: /spec/template/spec/nodeSelector
+{{- end }}
     - target:
         kind: Deployment
         name: linstor-controller
