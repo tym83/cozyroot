@@ -21,8 +21,14 @@
 # redis-operator's monitoring.yaml, where the ServiceMonitor is off by default
 # and the defect is therefore latent.
 
+load test_helper
+
+setup() {
+    strict_setup
+}
+
 setup_file() {
-    REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
+    REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME:-$0}")/.." && pwd)"
     export REPO_ROOT
 }
 
