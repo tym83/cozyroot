@@ -744,6 +744,25 @@ monitoring:
   # tenant once, since it travels in the cozystack-values Secret they all
   # read.
   tracingCentralTenantBytesPerSecond: 0
+  # The port node-exporter listens on, and is probed on, on every node. 0 keeps
+  # the well-known 9100.
+  #
+  # 9100 is well-known, not reserved, and node-exporter runs with host
+  # networking, so it loses the port to whatever took it first. The blockstor
+  # satellite serves its snapshot stream there in the releases pinned today,
+  # and because the satellite is healthy while node-exporter crash-loops on
+  # "address already in use", the cluster reads as a broken exporter rather
+  # than as a collision. Moving node-exporter is the cheaper side of that
+  # argument: the satellite's port is what peers dial to replicate, while
+  # nothing dials node-exporter except the scrape config this platform
+  # renders.
+  #
+  # Forwarded into the emitted cozystack.monitoring-agents Package as the
+  # node-exporter chart's service.port and targetPort, which move the
+  # listener, the container port and both probes together. Moving fewer of
+  # them leaves the kubelet killing a container that serves correctly, which
+  # looks like the same crash loop and hides that a port was ever involved.
+  nodeExporterPort: 0
 # Backup storage overrides for the platform-managed cozy-default BackupClass.
 # Everything set here is forwarded verbatim into the emitted
 # cozystack.backupstrategy-controller Package CR as

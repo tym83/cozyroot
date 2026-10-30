@@ -1,0 +1,70 @@
+# node-exporter runs with host networking on 9100, a well-known port rather
+# than a reserved one, so it loses the port to whatever took it first -- the
+# blockstor satellite's snapshot stream does, in the releases pinned today.
+# monitoring.nodeExporterPort is the way out, and it only works if the platform
+# forwards it into the Package the monitoring-agents chart renders from. The
+# chart's own suite covers what the value does once it arrives; this one covers
+# that it arrives at all, and that leaving it unset changes nothing.
+suite: bundles.system monitoring.nodeExporterPort → monitoring-agents wiring
+templates:
+  - templates/bundles/system.yaml
+release:
+  name: cozystack
+  namespace: cozy-system
+tests:
+  - it: forwards only the target when the port is unset
+    set:
+      bundles:
+        system:
+          enabled: true
+          variant: isp-full
+    documentSelector:
+      path: metadata.name
+      value: cozystack.monitoring-agents
+    asserts:
+      - equal:
+          path: spec.components.monitoring-agents.values.global.target
+          value: tenant-root
+      - notExists:
+          path: spec.components.monitoring-agents.values.prometheus-node-exporter
+
+  - it: forwards the port as the node-exporter chart's service port and target port
+    set:
+      bundles:
+        system:
+          enabled: true
+          variant: isp-full
+      monitoring:
+        nodeExporterPort: 9102
+    documentSelector:
+      path: metadata.name
+      value: cozystack.monitoring-agents
+    asserts:
+      - equal:
+          path: spec.components.monitoring-agents.values.prometheus-node-exporter.service.port
+          value: 9102
+      - equal:
+          path: spec.components.monitoring-agents.values.prometheus-node-exporter.service.targetPort
+          value: 9102
+      # The target has to survive being joined by a second key: it is what
+      # points the agents at the tenant hosting the stack, and losing it is
+      # silent.
+      - equal:
+          path: spec.components.monitoring-agents.values.global.target
+          value: tenant-root
+
+  # A port is forwarded verbatim into a chart that renders it into a listen
+  # address and two probes, so a value that is not a port has no sensible
+  # rendering -- it produces a DaemonSet that cannot start, on every node, with
+  # the reason buried in a container log.
+  - it: refuses a value outside the port range
+    set:
+      bundles:
+        system:
+          enabled: true
+          variant: isp-full
+      monitoring:
+        nodeExporterPort: 70000
+    asserts:
+      - failedTemplate:
+          errorMessage: "monitoring.nodeExporterPort: 70000 is not a port; use 0 to keep the default of 9100"
