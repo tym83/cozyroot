@@ -12,6 +12,7 @@ bundles:
     - cozystack.cluster-autoscaler-hetzner
     - cozystack.clustersecret-operator
     - cozystack.computeplane-application
+    - cozystack.cozyplane-api
     - cozystack.external-dns
     - cozystack.external-dns-application
     - cozystack.external-secrets-operator
