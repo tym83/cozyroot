@@ -1,0 +1,146 @@
+# networking.cni: cozyplane swaps the whole pod network, so the suite pins both
+# halves of that: the networking Package takes the cozyplane variant for the
+# substrate, and the tenant API comes with it. The second half is the one worth
+# a test, because the tenant kinds have no CRDs anywhere -- leaving the API out
+# does not reduce tenancy, it removes it.
+suite: cozyplane as the pod network
+templates:
+  - templates/bundles/system.yaml
+release:
+  name: cozystack
+  namespace: cozy-system
+tests:
+  - it: installs Cilium and no tenant API by default
+    values:
+      - ../values-isp-slim-generic.yaml
+    asserts:
+      - equal:
+          path: spec.variant
+          value: cilium-generic
+        documentSelector:
+          path: metadata.name
+          value: cozystack.networking
+      - equal:
+          path: spec.variant
+          value: noop
+        documentSelector:
+          path: metadata.name
+          value: cozystack.cozyplane-api
+
+  - it: installs cozyplane and its tenant API on the generic substrate
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      networking:
+        cni: cozyplane
+    asserts:
+      - equal:
+          path: spec.variant
+          value: cozyplane-generic
+        documentSelector:
+          path: metadata.name
+          value: cozystack.networking
+      - equal:
+          path: spec.variant
+          value: default
+        documentSelector:
+          path: metadata.name
+          value: cozystack.cozyplane-api
+
+  - it: installs the Talos variant on Talos
+    values:
+      - ../values-isp-slim.yaml
+    set:
+      networking:
+        cni: cozyplane
+    documentSelector:
+      path: metadata.name
+      value: cozystack.networking
+    asserts:
+      - equal:
+          path: spec.variant
+          value: cozyplane
+
+  # The components assembled for the other two datapaths describe KubeOVN's
+  # address plan and Cilium's configuration. Passing them to a package that
+  # installs neither would configure nothing while looking as though it did.
+  - it: passes none of the Cilium or KubeOVN components to cozyplane
+    values:
+      - ../values-isp-full-generic.yaml
+    set:
+      networking:
+        cni: cozyplane
+    documentSelector:
+      path: metadata.name
+      value: cozystack.networking
+    asserts:
+      - notExists:
+          path: spec.components
+
+  - it: runs without tenant networking when asked
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      networking:
+        cni: cozyplane
+        cozyplane:
+          apiVariant: noop
+    documentSelector:
+      path: metadata.name
+      value: cozystack.cozyplane-api
+    asserts:
+      - equal:
+          path: spec.variant
+          value: noop
+
+  - it: runs three etcd members of its own when asked
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      networking:
+        cni: cozyplane
+        cozyplane:
+          apiVariant: replicated-etcd
+    documentSelector:
+      path: metadata.name
+      value: cozystack.cozyplane-api
+    asserts:
+      - equal:
+          path: spec.variant
+          value: replicated-etcd
+
+  # The encryption switch drives KubeOVN's IPsec. On a datapath that has no
+  # KubeOVN it would be a silent no-op, which is worse than a refusal.
+  - it: refuses east-west encryption on cozyplane
+    values:
+      - ../values-isp-full-generic.yaml
+    set:
+      networking:
+        cni: cozyplane
+        encryption:
+          enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "not supported with networking.cni: cozyplane"
+
+  - it: refuses a CNI the platform does not install
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      networking:
+        cni: calico
+    asserts:
+      - failedTemplate:
+          errorPattern: "is not a CNI this platform installs"
+
+  - it: refuses a tenant API variant that does not exist
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      networking:
+        cni: cozyplane
+        cozyplane:
+          apiVariant: crds
+    asserts:
+      - failedTemplate:
+          errorPattern: "is not a variant of cozystack.cozyplane-api"

@@ -83,6 +83,33 @@ bundles:
   enabledPackages: []
 # Network configuration
 networking:
+  # Which pod network the platform installs.
+  #
+  # "cilium" is the default and covers both the Cilium-only datapath of the
+  # slim variants and the KubeOVN one of the full variants.
+  #
+  # "cozyplane" replaces both with an eBPF Geneve overlay that carries tenant
+  # VPCs without Open vSwitch, so tenant networking becomes possible on a
+  # kernel built without CONFIG_OPENVSWITCH. No Cilium agent runs under it, and
+  # the cilium.io policy CRDs are installed inert only so that stock charts
+  # embedding CiliumNetworkPolicy objects still install; what is enforced is
+  # the upstream NetworkPolicy on the default network, plus SecurityGroup and
+  # HostFirewall once the tenant API below is on.
+  cni: cilium
+  cozyplane:
+    # Where cozyplane keeps its tenant records, and whether it keeps any.
+    #
+    # The tenant kinds -- VPC, VPCBinding, VPCGateway, Port, SecurityGroup,
+    # FloatingIP, HostFirewall -- have no CRDs anywhere; they are served by an
+    # aggregated API server alone. "noop" therefore does not mean tenancy with
+    # fewer features, it means no tenancy at all: the cluster gets the default
+    # pod network and the upstream NetworkPolicy on it and nothing more.
+    #
+    # "default" runs one etcd member on a replicated volume, which survives
+    # losing its node through the storage layer rather than through a quorum.
+    # "replicated-etcd" runs three of its own through the etcd-operator, for a
+    # cluster with the memory to spend on that.
+    apiVariant: default
   clusterDomain: "cozy.local"
   # On the kube-ovn variants the last /21 of podCIDR is reserved for Cilium's
   # own router and Gateway API Ingress addresses and excluded from kube-ovn

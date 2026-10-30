@@ -43,7 +43,8 @@
 {{- $ciliumValues := dict "cilium" $cilium -}}
 {{- $_ := set $networkingComponents "cilium" (dict "values" $ciliumValues) -}}
 {{- end -}}
-{{include "cozystack.platform.package.networking" (list $ $networkingComponents "kubeovn-cilium" "cilium") }}
+{{include "cozystack.platform.package.networking" (list $ $networkingComponents "kubeovn-cilium" "cilium" "cozyplane") }}
+{{include "cozystack.platform.package.cozyplaneApi" (list $) }}
 {{include "cozystack.platform.system.common-packages" $ }}
 {{- /* Talos bundles only bridge, firewall, flannel, host-local, loopback and
        portmap in /opt/cni/bin from its own node image; the other ten this
@@ -139,7 +140,8 @@
 {{- $_ := set $networkingComponents "cilium" (dict "values" $ciliumValues) -}}
 {{- end -}}
 {{- /* Use kubeovn-cilium-generic / cilium-generic (no values-talos.yaml) */ -}}
-{{include "cozystack.platform.package.networking" (list $ $networkingComponents "kubeovn-cilium-generic" "cilium-generic") }}
+{{include "cozystack.platform.package.networking" (list $ $networkingComponents "kubeovn-cilium-generic" "cilium-generic" "cozyplane-generic") }}
+{{include "cozystack.platform.package.cozyplaneApi" (list $) }}
 {{include "cozystack.platform.system.common-packages" $ }}
 {{- /* multus staging: same default as the isp-full branch above, and here the
        gap is wider -- generic Linux has no guarantee that /opt/cni/bin holds
