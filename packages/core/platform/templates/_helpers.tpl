@@ -138,7 +138,7 @@ nothing while looking as though it did.
 {{- if dig "encryption" "enabled" false ($root.Values.networking | default dict) -}}
 {{- fail "networking.encryption.enabled is not supported with networking.cni: cozyplane -- the KubeOVN IPsec switch it drives is not part of this datapath" -}}
 {{- end -}}
-{{- include "cozystack.platform.package" (list "cozystack.networking" (index . 4) $root dict) }}
+{{- include "cozystack.platform.package" (list "cozystack.networking" (index . 4) $root (include "cozystack.platform.cozyplane.components" $root | fromYaml)) }}
 {{- else if ne $cni "cilium" -}}
 {{- fail (printf "networking.cni: %q is not a CNI this platform installs; use \"cilium\" or \"cozyplane\"" $cni) -}}
 {{- else -}}
@@ -322,4 +322,36 @@ sliced into /24s ever allowed.
 
 {{- define "cozystack.platform.ciliumPoolRange" -}}
 {{- join ".." (splitList " " (include "cozystack.platform.ciliumPoolBounds" .)) -}}
+{{- end }}
+
+{{/*
+The address plan cozyplane needs, from the one the platform already declares.
+
+Three of its settings are facts about the cluster it cannot discover: the pod
+supernet it masquerades out of, the Service range it denies to tenants at
+their gateways, and the cluster DNS address, which is the one door a gateway
+opens so a tenant pod resolves with a stock resolv.conf. The chart defaults
+are a guess at all three, and a wrong guess here is not an error anywhere --
+it is pods with no return path off the cluster and tenants that cannot
+resolve, on a cluster that otherwise looks healthy. So they are threaded from
+the platform's own values rather than left to match by luck.
+*/}}
+{{- define "cozystack.platform.cozyplane.components" -}}
+{{- $net := .Values.networking | default dict -}}
+{{- $service := $net.serviceCIDR | toString -}}
+{{- $dns := $net.clusterDNS | default "" | toString -}}
+{{- if not $dns -}}
+{{- $base := first (splitList "/" $service) -}}
+{{- $octets := splitList "." $base -}}
+{{- if or (ne (len $octets) 4) (ne (last $octets) "0") -}}
+{{- fail (printf "networking.serviceCIDR is %q, whose base address does not end in .0, so the cluster DNS address cannot be derived from it; set networking.clusterDNS explicitly" $service) -}}
+{{- end -}}
+{{- $dns = printf "%s.%s.%s.10" (index $octets 0) (index $octets 1) (index $octets 2) -}}
+{{- end -}}
+cozyplane:
+  values:
+    egress:
+      clusterCIDR: {{ $net.podCIDR | toString | quote }}
+      serviceCIDR: {{ $service | quote }}
+      clusterDNS: {{ $dns | quote }}
 {{- end }}
