@@ -168,9 +168,12 @@ network and the upstream NetworkPolicy on it and nothing more.
 {{- $net := $root.Values.networking | default dict -}}
 {{- $variant := "noop" -}}
 {{- if eq (dig "cni" "cilium" $net | toString) "cozyplane" -}}
-{{- $variant = dig "cozyplane" "apiVariant" "default" $net | toString -}}
+{{- $variant = dig "cozyplane" "apiVariant" "noop" $net | toString -}}
 {{- if not (has $variant (list "noop" "default" "replicated-etcd")) -}}
 {{- fail (printf "networking.cozyplane.apiVariant: %q is not a variant of cozystack.cozyplane-api; use \"default\" for one etcd member on a replicated volume, \"replicated-etcd\" for three of its own, or \"noop\" to run without tenant networking" $variant) -}}
+{{- end -}}
+{{- if and (ne $variant "noop") (not (dig "cozyplane" "acknowledgeApiGroupTakeover" false $net)) -}}
+{{- fail "networking.cozyplane.apiVariant installs an aggregated API server for sdn.cozystack.io, and this platform already serves that group from cozystack-api, where SecurityGroup lives. The cozyplane server repoints the v1alpha1.sdn.cozystack.io APIService at itself on startup while the cozystack-api release keeps pointing it back, so the two fight over one object and every SecurityGroup in the cluster resolves to whichever won last -- a different schema, in a different store. Leave apiVariant at noop, which gives the pod network and the upstream NetworkPolicy on it without the tenant kinds, or set networking.cozyplane.acknowledgeApiGroupTakeover: true on a cluster where losing cozystack-api's SecurityGroup is intended." -}}
 {{- end -}}
 {{- end -}}
 {{- include "cozystack.platform.package" (list "cozystack.cozyplane-api" $variant $root dict) }}

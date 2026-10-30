@@ -21,13 +21,22 @@
 # redis-operator's monitoring.yaml, where the ServiceMonitor is off by default
 # and the defect is therefore latent.
 
-setup_file() {
-    REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
-    export REPO_ROOT
+load test_helper
+
+setup() {
+    strict_setup
 }
 
+# At file scope, not in setup_file: cozytest.sh runs no such hook, and under it
+# a variable set there is simply never set -- which nounset then turns into an
+# unbound-variable failure rather than a skipped check.
+REPO_ROOT="$(cd "$(dirname "${BATS_TEST_FILENAME:-$0}")/.." && pwd)"
+
 @test "no chart template trims the newline after a document separator" {
-    run python3 - "$REPO_ROOT/packages" <<'PY'
+    # Not bats' `run`: cozytest.sh does not provide it, and this file has to
+    # pass under both runners.
+    status=0
+    output="$(python3 - "$REPO_ROOT/packages" <<'PY'
 import os, re, sys
 
 root = sys.argv[1]
@@ -72,8 +81,9 @@ if offenders:
         print("  " + o)
     sys.exit(1)
 PY
-    [ "$status" -eq 0 ] || {
+)" || status=$?
+    if [ "$status" -ne 0 ]; then
         printf '%s\n' "$output" >&2
         false
-    }
+    fi
 }

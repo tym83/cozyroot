@@ -27,7 +27,7 @@ tests:
           path: metadata.name
           value: cozystack.cozyplane-api
 
-  - it: installs cozyplane and its tenant API on the generic substrate
+  - it: installs cozyplane without the tenant API by default
     values:
       - ../values-isp-slim-generic.yaml
     set:
@@ -42,7 +42,7 @@ tests:
           value: cozystack.networking
       - equal:
           path: spec.variant
-          value: default
+          value: noop
         documentSelector:
           path: metadata.name
           value: cozystack.cozyplane-api
@@ -133,21 +133,36 @@ tests:
       - failedTemplate:
           errorPattern: "set networking.clusterDNS explicitly"
 
-  - it: runs without tenant networking when asked
+  # Turning the tenant API on takes sdn.cozystack.io away from cozystack-api,
+  # where SecurityGroup lives, so it is refused until that is said out loud.
+  - it: refuses the tenant API while the platform serves the same group
     values:
       - ../values-isp-slim-generic.yaml
     set:
       networking:
         cni: cozyplane
         cozyplane:
-          apiVariant: noop
+          apiVariant: default
+    asserts:
+      - failedTemplate:
+          errorPattern: "already serves that group from cozystack-api"
+
+  - it: installs the tenant API once the takeover is acknowledged
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      networking:
+        cni: cozyplane
+        cozyplane:
+          apiVariant: default
+          acknowledgeApiGroupTakeover: true
     documentSelector:
       path: metadata.name
       value: cozystack.cozyplane-api
     asserts:
       - equal:
           path: spec.variant
-          value: noop
+          value: default
 
   - it: runs three etcd members of its own when asked
     values:
@@ -157,6 +172,7 @@ tests:
         cni: cozyplane
         cozyplane:
           apiVariant: replicated-etcd
+          acknowledgeApiGroupTakeover: true
     documentSelector:
       path: metadata.name
       value: cozystack.cozyplane-api
@@ -197,6 +213,7 @@ tests:
         cni: cozyplane
         cozyplane:
           apiVariant: crds
+          acknowledgeApiGroupTakeover: true
     asserts:
       - failedTemplate:
           errorPattern: "is not a variant of cozystack.cozyplane-api"
