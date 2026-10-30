@@ -13,7 +13,7 @@ CA -- which is what the client Certificate below is for. The apiserver
 re-reads all three files on rotation through an fsnotify watch, so nothing in
 this chart carries a reloader annotation: an annotation would restart pods
 cert-manager has already updated in place.
-*/ -}}
+*/}}
 {{- $clusterDomain := .Values.clusterDomain | default (index (.Values._cluster | default dict) "cluster-domain") | default "cozy.local" }}
 apiVersion: cert-manager.io/v1
 kind: Issuer
@@ -58,7 +58,7 @@ and the legacy blockstor-controller name that older LS_CONTROLLERS values and
 the upstream reference wiring still carry. Dropping the legacy name would make
 a correct-looking endpoint fail certificate validation rather than connection,
 which is the harder failure to read.
-*/ -}}
+*/}}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -93,7 +93,7 @@ and affinity controllers, and the linstor CLI. Its Secret carries ca.crt as
 well, so the consumer verifies the apiserver against the same CA it was issued
 from. A consumer in another namespace needs its own Certificate from this
 Issuer -- a Secret does not cross namespaces.
-*/ -}}
+*/}}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

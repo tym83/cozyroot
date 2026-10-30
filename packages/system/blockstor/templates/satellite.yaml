@@ -10,7 +10,7 @@ global_common.conf, and the hostPath bind below shadows it. Put it back
 through a subPath mount or drbdadm warns on every parse that the file is
 missing. Deliberately lean: per-resource tuning belongs in the rendered .res
 files, not in the global scope.
-*/ -}}
+*/}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -37,7 +37,7 @@ write surface on the group as the controller. The read on core Nodes is what
 gives each peer a routable address for DRBD replication: without it the
 addresses fall back to the pod CIDR, peers never connect, and no replicated
 resource ever reaches UpToDate -- silently, because nothing errors.
-*/ -}}
+*/}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:

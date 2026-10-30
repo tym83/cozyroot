@@ -35,7 +35,7 @@ The cluster passphrase, which LUKS volume keys are wrapped with, is read on
 Secret in this namespace, so the grant is namespaced and names the verbs
 rather than the object: the Secret does not exist until the first passphrase
 is set.
-*/ -}}
+*/}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -158,7 +158,7 @@ spec:
 {{- /*
 Mutual-TLS only: the Service exposes 3371 and nothing else, so nothing on the
 network can reach the apiserver in plaintext.
-*/ -}}
+*/}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -177,7 +177,7 @@ The name the upstream reference wiring and older LS_CONTROLLERS values carry.
 It selects the apiserver pods -- there is no separate controller endpoint --
 and the serving certificate covers it, so a consumer configured either way
 connects and validates.
-*/ -}}
+*/}}
 apiVersion: v1
 kind: Service
 metadata:

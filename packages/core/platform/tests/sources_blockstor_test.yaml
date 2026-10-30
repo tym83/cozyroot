@@ -1,0 +1,83 @@
+suite: blockstor storage PackageSource wiring
+templates:
+  - templates/sources.yaml
+release:
+  name: cozystack
+  namespace: cozy-system
+tests:
+  # Both variants are the same service, so they land in the same namespace:
+  # the chart reaches blockstor's CA Issuer and its client Secret, and both are
+  # namespace-scoped.
+  - it: installs blockstor beside the piraeus pieces it still needs
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - equal:
+          path: spec.variants[?(@.name=="blockstor")].components[?(@.name=="blockstor")].install.namespace
+          value: cozy-linstor
+      - equal:
+          path: spec.variants[?(@.name=="blockstor")].components[?(@.name=="linstor")].install.namespace
+          value: cozy-linstor
+
+  # The satellite drives DRBD against the host kernel through host namespaces
+  # and host paths, which the restricted pod-security profile refuses.
+  - it: installs the storage agent privileged
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - equal:
+          path: spec.variants[?(@.name=="blockstor")].components[?(@.name=="blockstor")].install.privileged
+          value: true
+
+  # The CRDs are the store: the control plane keeps every Resource and
+  # StoragePool in them, so nothing may reconcile before they exist.
+  - it: installs the CRDs before anything that writes to them
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - contains:
+          path: spec.variants[?(@.name=="blockstor")].components[?(@.name=="blockstor")].install.dependsOn
+          content: blockstor-crds
+
+  # The chart renders the LinstorCluster either way; what makes the operator
+  # skip the JVM controller is the external-controller values file, so the
+  # component must carry it.
+  - it: hands the storage chart the external-controller values
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - contains:
+          path: spec.variants[?(@.name=="blockstor")].components[?(@.name=="linstor")].valuesFiles
+          content: values-blockstor.yaml
+      - contains:
+          path: spec.variants[?(@.name=="blockstor")].components[?(@.name=="linstor")].install.dependsOn
+          content: blockstor
+
+  # The default variant is untouched: it still deploys the bundled controller
+  # and must not acquire a values file that would turn it off.
+  - it: leaves the default variant alone
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - notExists:
+          path: spec.variants[?(@.name=="default")].components[?(@.name=="linstor")].valuesFiles
+
+  # The volume-aware scheduler asks the storage control plane where a volume's
+  # replicas are. Point it at the wrong endpoint, or hand it a certificate from
+  # the wrong CA, and nothing fails: the extender is simply never answered and
+  # volumes are placed without knowing where their data is.
+  - it: points the volume-aware scheduler at blockstor
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor-scheduler
+    asserts:
+      - contains:
+          path: spec.variants[?(@.name=="blockstor")].components[?(@.name=="linstor-scheduler")].valuesFiles
+          content: values-blockstor.yaml
+      - notExists:
+          path: spec.variants[?(@.name=="default")].components[?(@.name=="linstor-scheduler")].valuesFiles
