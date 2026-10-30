@@ -1,0 +1,27 @@
+# The two switches are independent, and each has its own suite. This one pins
+# that they compose: a small cluster wants both, and the pair is what the
+# packages are measured as.
+suite: blockstor and cozyplane in one bundle
+templates:
+  - templates/bundles/system.yaml
+release:
+  name: cozystack
+  namespace: cozy-system
+tests:
+  - it: selects both on the generic slim bundle
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      storage:
+        variant: blockstor
+      networking:
+        cni: cozyplane
+        cozyplane:
+          apiVariant: default
+    asserts:
+      - equal: {path: spec.variant, value: blockstor}
+        documentSelector: {path: metadata.name, value: cozystack.linstor}
+      - equal: {path: spec.variant, value: cozyplane-generic}
+        documentSelector: {path: metadata.name, value: cozystack.networking}
+      - equal: {path: spec.variant, value: default}
+        documentSelector: {path: metadata.name, value: cozystack.cozyplane-api}
