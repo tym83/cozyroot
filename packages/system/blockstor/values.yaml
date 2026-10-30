@@ -50,6 +50,19 @@ satellite:
     limits:
       cpu: 500m
       memory: 512Mi
+  ## Hand LVM a configuration that does not wait for udev.
+  ##
+  ## LVM asks the kernel for a mapping and then waits for udev to publish the
+  ## device node it is about to open. A host with a minimal userspace runs no
+  ## udev, the node never appears, and creating a pool fails at the step that
+  ## wipes the start of the new volume -- leaving a kernel mapping and a stale
+  ## node that hold the disk and make every retry fail differently, so the
+  ## loop never converges.
+  ##
+  ## On by default because it is correct wherever udev is absent and harmless
+  ## where it is present: it only stops LVM waiting for acknowledgements that
+  ## will not come, and makes it create the nodes itself.
+  lvmWithoutUdev: true
   ## Where the satellite runs. The default places one on every node that will
   ## take it, including control-plane nodes: on a small cluster those are the
   ## only nodes there are, and a node with no backing device simply registers

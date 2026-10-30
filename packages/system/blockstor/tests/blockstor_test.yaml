@@ -192,3 +192,54 @@ tests:
       - equal:
           path: spec.template.spec.volumes[?(@.name=="run-udev")].hostPath.type
           value: DirectoryOrCreate
+
+  # LVM waits for udev to publish the node it is about to open. Where there is
+  # no udev the wait never ends, the half-made mapping holds the disk, and
+  # every retry fails differently -- so the configuration that stops it waiting
+  # has to reach the satellite, not merely exist in the chart.
+  - it: hands the satellite an LVM configuration that does not wait for udev
+    template: templates/satellite.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: lvm-conf
+            mountPath: /etc/lvm/lvm.conf
+            subPath: lvm.conf
+            readOnly: true
+
+  - it: carries the settings that make LVM create the nodes itself
+    template: templates/satellite.yaml
+    documentSelector:
+      path: metadata.name
+      value: blockstor-satellite-lvm-conf
+    asserts:
+      - matchRegex:
+          path: data["lvm.conf"]
+          pattern: "udev_sync = 0"
+      - matchRegex:
+          path: data["lvm.conf"]
+          pattern: "udev_rules = 0"
+      - matchRegex:
+          path: data["lvm.conf"]
+          pattern: "verify_udev_operations = 0"
+      - matchRegex:
+          path: data["lvm.conf"]
+          pattern: "obtain_device_list_from_udev = 0"
+
+  - it: leaves LVM alone when the host runs udev
+    template: templates/satellite.yaml
+    set:
+      satellite:
+        lvmWithoutUdev: false
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: lvm-conf

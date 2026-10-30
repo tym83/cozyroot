@@ -29,6 +29,22 @@ data:
         disk {}
         net {}
     }
+{{- if .Values.satellite.lvmWithoutUdev }}
+---
+{{- /*
+The LVM configuration a host without udev needs. Mounted over the image's own
+/etc/lvm/lvm.conf, which is empty: the settings it carries are the difference
+between a thin pool that is created and a retry loop that never converges.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blockstor-satellite-lvm-conf
+  namespace: {{ .Release.Namespace }}
+data:
+  lvm.conf: |
+{{ .Files.Get "files/lvm-no-udev.conf" | indent 4 }}
+{{- end }}
 ---
 {{- /*
 The satellite runs its own reconcilers for the node's slice of the CRDs and
@@ -227,6 +243,12 @@ spec:
               mountPath: /etc/drbd.d/global_common.conf
               subPath: global_common.conf
               readOnly: true
+            {{- if .Values.satellite.lvmWithoutUdev }}
+            - name: lvm-conf
+              mountPath: /etc/lvm/lvm.conf
+              subPath: lvm.conf
+              readOnly: true
+            {{- end }}
           resources:
             {{- toYaml .Values.satellite.resources | nindent 12 }}
       volumes:
@@ -273,3 +295,11 @@ spec:
             items:
               - key: global_common.conf
                 path: global_common.conf
+        {{- if .Values.satellite.lvmWithoutUdev }}
+        - name: lvm-conf
+          configMap:
+            name: blockstor-satellite-lvm-conf
+            items:
+              - key: lvm.conf
+                path: lvm.conf
+        {{- end }}
