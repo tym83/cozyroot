@@ -103,3 +103,24 @@ tests:
           path: spec.config.s3Url
           value: https://minio.example.internal:9000
         template: templates/velero-bsl.yaml
+
+  - it: "no endpoint set: the in-cluster host is named in the cluster domain the platform published"
+    set:
+      _cluster:
+        cluster-domain: cluster.local
+    asserts:
+      - equal:
+          path: spec.template.destination.s3.endpoint
+          value: http://seaweedfs-s3.tenant-root.svc.cluster.local:8333
+        template: templates/strategy-etcd-default.yaml
+      - equal:
+          path: spec.template.barmanObjectStore.endpointURL
+          value: http://seaweedfs-s3.tenant-root.svc.cluster.local:8333
+        template: templates/strategy-cnpg-default.yaml
+
+  - it: "no endpoint and no published domain: the historical cozy.local host"
+    asserts:
+      - equal:
+          path: spec.template.destination.s3.endpoint
+          value: http://seaweedfs-s3.tenant-root.svc.cozy.local:8333
+        template: templates/strategy-etcd-default.yaml
