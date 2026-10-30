@@ -109,7 +109,15 @@ networking:
     # losing its node through the storage layer rather than through a quorum.
     # "replicated-etcd" runs three of its own through the etcd-operator, for a
     # cluster with the memory to spend on that.
-    apiVariant: default
+    #
+    # The default is noop, and not because tenancy is optional. That server
+    # serves sdn.cozystack.io, which this platform already serves from
+    # cozystack-api, where SecurityGroup lives -- and it repoints the group's
+    # APIService at itself on startup while the cozystack-api release points it
+    # back. Turning it on therefore needs the acknowledgement below, which says
+    # that losing cozystack-api's SecurityGroup is what was meant.
+    apiVariant: noop
+    acknowledgeApiGroupTakeover: false
   clusterDomain: "cozy.local"
   # On the kube-ovn variants the last /21 of podCIDR is reserved for Cilium's
   # own router and Gateway API Ingress addresses and excluded from kube-ovn
