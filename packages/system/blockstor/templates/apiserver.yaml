@@ -1,0 +1,192 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: blockstor-apiserver
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: blockstor-apiserver
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [blockstor.cozystack.io]
+    resources: ["*"]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: blockstor-apiserver
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: blockstor-apiserver
+subjects:
+  - kind: ServiceAccount
+    name: blockstor-apiserver
+    namespace: {{ .Release.Namespace }}
+---
+{{- /*
+The cluster passphrase, which LUKS volume keys are wrapped with, is read on
+`linstor encryption enter-passphrase` and written on create/modify. It is a
+Secret in this namespace, so the grant is namespaced and names the verbs
+rather than the object: the Secret does not exist until the first passphrase
+is set.
+*/ -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: blockstor-apiserver-secrets
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: blockstor-apiserver-secrets
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: blockstor-apiserver-secrets
+subjects:
+  - kind: ServiceAccount
+    name: blockstor-apiserver
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blockstor-apiserver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: blockstor-apiserver
+spec:
+  replicas: {{ .Values.apiserver.replicas }}
+  selector:
+    matchLabels:
+      app: blockstor-apiserver
+  template:
+    metadata:
+      labels:
+        app: blockstor-apiserver
+    spec:
+      serviceAccountName: blockstor-apiserver
+      terminationGracePeriodSeconds: 21
+      {{- /*
+      Spread rather than pin: a node loss should cost one replica, not all of
+      them. ScheduleAnyway because the CSI driver cannot provision while the
+      API is unreachable, so an unschedulable replica is worse than a skewed one.
+      */}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: blockstor-apiserver
+      containers:
+        - name: apiserver
+          image: {{ .Values.images.registry }}/blockstor-apiserver:{{ .Values.images.tag }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          args:
+            {{- /*
+            The plain-HTTP listener is deliberately not in the Service: it is
+            reachable only by port-forward to a pod, for the linstor CLI during
+            debugging. Everything on the network uses the mutual-TLS port.
+            */}}
+            - --rest-bind-address=:3370
+            - --tls-bind-address=:3371
+            - --tls-cert-file=/etc/blockstor/tls/tls.crt
+            - --tls-key-file=/etc/blockstor/tls/tls.key
+            - --tls-client-ca-file=/etc/blockstor/tls/ca.crt
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=0
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: rest-tls
+              containerPort: 3371
+            - name: rest-debug
+              containerPort: 3370
+            - name: health
+              containerPort: 8081
+          volumeMounts:
+            - name: api-tls
+              mountPath: /etc/blockstor/tls
+              readOnly: true
+          {{- /*
+          Both probes are HTTP GETs against the manager's own endpoints. A TCP
+          check on the REST port would mark the pod Ready as soon as the
+          listener bound, which is before the caches have synced, and would not
+          notice a wedged manager behind a listener that is still up.
+          */}}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            {{- toYaml .Values.apiserver.resources | nindent 12 }}
+      volumes:
+        - name: api-tls
+          secret:
+            secretName: blockstor-apiserver-server-tls
+---
+{{- /*
+Mutual-TLS only: the Service exposes 3371 and nothing else, so nothing on the
+network can reach the apiserver in plaintext.
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: blockstor-apiserver
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: blockstor-apiserver
+  ports:
+    - name: rest-tls
+      port: 3371
+      targetPort: 3371
+---
+{{- /*
+The name the upstream reference wiring and older LS_CONTROLLERS values carry.
+It selects the apiserver pods -- there is no separate controller endpoint --
+and the serving certificate covers it, so a consumer configured either way
+connects and validates.
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: blockstor-controller
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: blockstor-apiserver
+  ports:
+    - name: rest-tls
+      port: 3371
+      targetPort: 3371

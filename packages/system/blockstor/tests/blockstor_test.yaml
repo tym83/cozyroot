@@ -1,0 +1,180 @@
+suite: blockstor control plane
+templates:
+  - templates/controller.yaml
+  - templates/apiserver.yaml
+  - templates/satellite.yaml
+  - templates/tls.yaml
+release:
+  name: blockstor
+  namespace: cozy-blockstor
+tests:
+  # Two reconcilers without a lease race on the DRBD layer, and the damage is
+  # on the disks rather than in the API, so the combination is refused at
+  # render time rather than reported later.
+  - it: refuses several controller replicas without leader election
+    template: templates/controller.yaml
+    set:
+      controller:
+        replicas: 2
+        leaderElect: false
+    asserts:
+      - failedTemplate:
+          errorPattern: "controller.replicas > 1 requires controller.leaderElect"
+
+  - it: allows a single controller replica without leader election
+    template: templates/controller.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    set:
+      controller:
+        replicas: 1
+        leaderElect: false
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect=false
+
+  # The default is two replicas holding a lease, so losing the node running the
+  # leader costs the lease rather than the next reconcile.
+  - it: runs the controller with a lease and a standby by default
+    template: templates/controller.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect=true
+      - exists:
+          path: spec.template.spec.affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution
+
+  # A standby on the same node as the leader survives nothing, but requiring
+  # separate nodes would leave the second replica unschedulable on a two-node
+  # cluster, so the spreading is preferred and not required.
+  - it: leaves a single controller replica unspread
+    template: templates/controller.yaml
+    documentSelector:
+      path: kind
+      value: Deployment
+    set:
+      controller:
+        replicas: 1
+    asserts:
+      - notExists:
+          path: spec.template.spec.affinity
+
+  # Plaintext must not be reachable over the network: the debug listener is
+  # bound in the pod and deliberately absent from both Services.
+  - it: exposes only the mutual-TLS port on both apiserver Services
+    template: templates/apiserver.yaml
+    documentSelector:
+      path: kind
+      value: Service
+      matchMany: true
+    asserts:
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+      - equal:
+          path: spec.ports[0].port
+          value: 3371
+      - equal:
+          path: spec.selector.app
+          value: blockstor-apiserver
+
+  # Consumers configured against either Service name must validate the
+  # certificate, so both names and the platform's cluster domain are in the SANs.
+  - it: covers both Service names and the platform cluster domain in the serving SANs
+    template: templates/tls.yaml
+    documentSelector:
+      path: metadata.name
+      value: blockstor-apiserver-server
+    set:
+      _cluster:
+        cluster-domain: example.internal
+    asserts:
+      - contains:
+          path: spec.dnsNames
+          content: blockstor-apiserver.cozy-blockstor.svc.example.internal
+      - contains:
+          path: spec.dnsNames
+          content: blockstor-controller.cozy-blockstor.svc.example.internal
+
+  # cert-manager rotates the material in place and the apiserver re-reads it
+  # from disk, so a reloader annotation would restart pods that need no restart.
+  - it: annotates nothing for the reloader
+    templates:
+      - templates/controller.yaml
+      - templates/apiserver.yaml
+      - templates/satellite.yaml
+    asserts:
+      - notExists:
+          path: metadata.annotations["reloader.stakater.com/auto"]
+
+  # On a cluster small enough that every node is a control-plane node, an
+  # affinity that avoids them schedules no satellite at all and the cluster has
+  # no storage. The default therefore places one everywhere.
+  - it: runs a satellite on every node by default
+    template: templates/satellite.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - notExists:
+          path: spec.template.spec.affinity
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            operator: Exists
+
+  - it: honours an affinity that keeps storage off the control plane
+    template: templates/satellite.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    set:
+      satellite:
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: node-role.kubernetes.io/control-plane
+                      operator: DoesNotExist
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key
+          value: node-role.kubernetes.io/control-plane
+
+  # The satellite drives the host's DRBD, LVM and ZFS through the host kernel,
+  # and every one of these is load-bearing for that: a private devtmpfs, a
+  # private IPC namespace or a container hostname all break it in ways that
+  # surface as storage that never reaches UpToDate rather than as an error.
+  - it: gives the satellite the host namespaces its tooling needs
+    template: templates/satellite.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true
+      - equal:
+          path: spec.template.spec.hostPID
+          value: true
+      - equal:
+          path: spec.template.spec.hostIPC
+          value: true
+      - equal:
+          path: spec.template.spec.dnsPolicy
+          value: ClusterFirstWithHostNet
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.privileged
+          value: true
