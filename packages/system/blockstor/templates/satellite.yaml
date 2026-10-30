@@ -1,0 +1,305 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: blockstor-satellite
+  namespace: {{ .Release.Namespace }}
+---
+{{- /*
+The satellite image carries one file in /etc/drbd.d, the drbd-utils default
+global_common.conf, and the hostPath bind below shadows it. Put it back
+through a subPath mount or drbdadm warns on every parse that the file is
+missing. Deliberately lean: per-resource tuning belongs in the rendered .res
+files, not in the global scope.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blockstor-satellite-drbd-conf
+  namespace: {{ .Release.Namespace }}
+data:
+  global_common.conf: |
+    global {
+        usage-count no;
+        udev-always-use-vnr;
+    }
+    common {
+        handlers {}
+        startup {}
+        options {}
+        disk {}
+        net {}
+    }
+{{- if .Values.satellite.lvmWithoutUdev }}
+---
+{{- /*
+The LVM configuration a host without udev needs. Mounted over the image's own
+/etc/lvm/lvm.conf, which is empty: the settings it carries are the difference
+between a thin pool that is created and a retry loop that never converges.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blockstor-satellite-lvm-conf
+  namespace: {{ .Release.Namespace }}
+data:
+  lvm.conf: |
+{{ .Files.Get "files/lvm-no-udev.conf" | indent 4 }}
+{{- end }}
+---
+{{- /*
+The satellite runs its own reconcilers for the node's slice of the CRDs and
+writes observed state back through server-side apply, so it needs the same
+write surface on the group as the controller. The read on core Nodes is what
+gives each peer a routable address for DRBD replication: without it the
+addresses fall back to the pod CIDR, peers never connect, and no replicated
+resource ever reaches UpToDate -- silently, because nothing errors.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: blockstor-satellite
+rules:
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [blockstor.cozystack.io]
+    resources: ["*"]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [blockstor.cozystack.io]
+    resources: ["*/status", "*/finalizers"]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: blockstor-satellite
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: blockstor-satellite
+subjects:
+  - kind: ServiceAccount
+    name: blockstor-satellite
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: blockstor-satellite
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: blockstor-satellite
+spec:
+  selector:
+    matchLabels:
+      app: blockstor-satellite
+  template:
+    metadata:
+      labels:
+        app: blockstor-satellite
+    spec:
+      serviceAccountName: blockstor-satellite
+      hostPID: true
+      {{- /*
+      hostNetwork so the container's hostname is the node name, which is what
+      drbdadm matches against the `on <node>` block of a .res file, and so the
+      address a satellite advertises is the node's own.
+      */}}
+      hostNetwork: true
+      {{- /*
+      The LVM userland and libzfs coordinate whole-host operations through
+      SysV/POSIX IPC. In a private namespace they take locks the host-side
+      tools do not see, which deadlocks rather than failing.
+      */}}
+      hostIPC: true
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- with .Values.satellite.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.satellite.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.satellite.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- /*
+      No preStop drain, and a short grace period on purpose. A peer wedged in
+      Connecting parks a DRBD kernel thread in uninterruptible wait, and even a
+      forced teardown blocks on an acknowledgement from that thread -- which
+      leaves the container in D state and the pod Terminating for minutes,
+      blocking the rollout. DRBD state belongs to the host kernel and outlives
+      the pod either way; the next satellite sweeps it at startup.
+      */}}
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: satellite
+          image: {{ .Values.images.registry }}/blockstor-satellite:{{ .Values.images.tag }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          args:
+            - --state-dir=/etc/drbd.d
+            - --health-probe-bind-address=:9101
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            {{- /*
+            Satellite-to-satellite snapshot streaming for a cross-node clone.
+            Under hostNetwork these are the node's real ports, so they have to
+            stay clear of the DRBD range and of node-exporter.
+            */}}
+            - name: snap-stream
+              containerPort: 3372
+              hostPort: 3372
+              protocol: TCP
+            - name: healthz
+              containerPort: 9101
+              hostPort: 9101
+              protocol: TCP
+          {{- /*
+          A wedged satellite stops answering here and kubelet restarts it.
+          Without that, its node keeps reporting Online from a stale heartbeat
+          while nothing on it reconciles.
+          */}}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: healthz
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            privileged: true
+          volumeMounts:
+            {{- /*
+            A bare bind of the host /dev, with no mount propagation: the
+            kubelet otherwise hands the container a private devtmpfs, and the
+            partition nodes the kernel creates when a pool is written land in
+            the host's instance only, where libzfs cannot open them.
+            */}}
+            - name: dev
+              mountPath: /dev
+            - name: modules
+              mountPath: /lib/modules
+              readOnly: true
+            - name: lvm-run
+              mountPath: /run/lvm
+            {{- /*
+            The host's udev database. libblkid and libzfs read partition
+            metadata from it; an empty one makes a freshly written partition
+            look absent.
+            */}}
+            - name: run-udev
+              mountPath: /run/udev
+              readOnly: true
+            - name: state
+              mountPath: /var/lib/blockstor-satellite
+            - name: pool
+              mountPath: /var/lib/blockstor-pool
+            {{- /*
+            Rendered .res files live on the node so they survive the pod and
+            are visible to every DRBD-aware process there. The host side is
+            blockstor's own directory rather than the LINSTOR one: two stacks
+            writing .res files for the same resource into one directory make
+            drbdadm see two claims on the same device minor and refuse every
+            operation.
+            */}}
+            - name: drbd-cfg
+              mountPath: /etc/drbd.d
+            - name: drbd-global-conf
+              mountPath: /etc/drbd.d/global_common.conf
+              subPath: global_common.conf
+              readOnly: true
+            {{- if .Values.satellite.lvmWithoutUdev }}
+            - name: lvm-conf
+              mountPath: /etc/lvm/lvm.conf
+              subPath: lvm.conf
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.satellite.resources | nindent 12 }}
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: modules
+          hostPath:
+            path: /lib/modules
+        - name: lvm-run
+          hostPath:
+            path: /run/lvm
+            type: DirectoryOrCreate
+        - name: run-udev
+          {{- /*
+          DirectoryOrCreate, not Directory: a host that runs no udev has no
+          /run/udev at all, and a strict type check turns that into a pod that
+          never starts rather than one that works with less information. The
+          database is what lets libblkid and libzfs read partition metadata
+          after a pool is written, and a host without udev has none of it to
+          read either way -- so the strict check buys nothing it does not
+          already cost. Distributions with a minimal userspace are the normal
+          case here, not the exception.
+          */}}
+          hostPath:
+            path: /run/udev
+            type: DirectoryOrCreate
+        - name: state
+          hostPath:
+            path: /var/lib/blockstor-satellite
+            type: DirectoryOrCreate
+        - name: pool
+          hostPath:
+            path: /var/lib/blockstor-pool
+            type: DirectoryOrCreate
+        - name: drbd-cfg
+          hostPath:
+            path: /var/lib/blockstor-drbd.d
+            type: DirectoryOrCreate
+        - name: drbd-global-conf
+          configMap:
+            name: blockstor-satellite-drbd-conf
+            items:
+              - key: global_common.conf
+                path: global_common.conf
+        {{- if .Values.satellite.lvmWithoutUdev }}
+        - name: lvm-conf
+          configMap:
+            name: blockstor-satellite-lvm-conf
+            items:
+              - key: lvm.conf
+                path: lvm.conf
+        {{- end }}

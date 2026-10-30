@@ -1,3 +1,5 @@
+{{- $external := .Values.externalController.enabled -}}
+{{- $externalURL := .Values.externalController.url | default (printf "https://blockstor-apiserver.%s.svc:3371" .Release.Namespace) -}}
 apiVersion: piraeus.io/v1
 kind: LinstorCluster
 metadata:
@@ -5,15 +7,40 @@ metadata:
   labels:
     platform.cozystack.io/no-delete: "true"
 spec:
+{{- if $external }}
+  {{- /* Naming an external controller is what stops the operator deploying
+         its own, and re-renders linstor-csi against this URL. */}}
+  externalController:
+    url: {{ $externalURL | quote }}
+  {{- /* The node selector is how the satellites are switched off: blockstor
+         ships its own agent, and two agents rendering .res files for one
+         resource make drbdadm refuse every operation on it.
+
+         The CRD says the selector chooses the nodes satellites run on. It
+         also reaches the CSI driver, the affinity controller and the NFS
+         server, which are the parts of piraeus this mode exists to keep --
+         and nothing reports an error when they vanish: volumes simply stay
+         Pending because no node is said to have storage. The patches below
+         take the selector back off them. */}}
+  nodeSelector:
+    {{- toYaml .Values.externalController.satelliteNodeSelector | nindent 4 }}
+{{- else }}
   #nodeSelector:
   #  node-role.kubernetes.io/linstor: ""
   internalTLS:
     certManager:
       name: linstor-internal-ca
       kind: Issuer
+{{- end }}
   apiTLS:
     certManager:
+{{- if $external }}
+      {{- /* The CSI driver has to present a certificate from the CA the
+             external API verifies clients against, not from this chart's own. */}}
+      name: {{ .Values.externalController.caIssuer }}
+{{- else }}
       name: linstor-api-ca
+{{- end }}
       kind: Issuer
   properties:
   {{- if .Values.linstor.autoDiskful.enabled }}
@@ -32,6 +59,7 @@ spec:
     value: "20"
   - name: DrbdOptions/Net/timeout
     value: "100"
+{{- if not $external }}
   controller:
     enabled: true
     podTemplate:
@@ -74,6 +102,7 @@ spec:
           configMap:
             name: linstor-plunger
             defaultMode: 0755
+{{- end }}
   csiController:
     podTemplate:
       spec:
@@ -123,6 +152,32 @@ spec:
         - name: linstor-csi
           image: {{ .Values.linstorCSI.image.repository }}:{{ .Values.linstorCSI.image.tag }}
   patches:
+{{- if $external }}
+    - target:
+        kind: Deployment
+        name: linstor-csi-controller
+      patch: |-
+        - op: remove
+          path: /spec/template/spec/nodeSelector
+    - target:
+        kind: DaemonSet
+        name: linstor-csi-node
+      patch: |-
+        - op: remove
+          path: /spec/template/spec/nodeSelector
+    - target:
+        kind: Deployment
+        name: linstor-affinity-controller
+      patch: |-
+        - op: remove
+          path: /spec/template/spec/nodeSelector
+    - target:
+        kind: DaemonSet
+        name: linstor-csi-nfs-server
+      patch: |-
+        - op: remove
+          path: /spec/template/spec/nodeSelector
+{{- end }}
     - target:
         kind: Deployment
         name: linstor-controller
