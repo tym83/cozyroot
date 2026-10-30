@@ -63,9 +63,9 @@ tests:
           path: spec.components.cozystack-controller.values.cozystackController.disableTelemetry
           value: true
 
-  # isp-full-generic already carries a cozystack-api override. The telemetry
-  # key must be added beside it, not replace it.
-  - it: coexists with the generic variant's cozystack-api nodeSelector override
+  # The telemetry key is set on cozystack-controller alone; the generic variant
+  # must not grow a cozystack-api override alongside it.
+  - it: leaves cozystack-api alone on the generic variant
     set:
       bundles:
         system:
@@ -80,6 +80,5 @@ tests:
       - equal:
           path: spec.components.cozystack-controller.values.cozystackController.disableTelemetry
           value: true
-      - equal:
-          path: spec.components.cozystack-api.values.cozystackAPI.nodeSelector["node-role.kubernetes.io/control-plane"]
-          value: "true"
+      - notExists:
+          path: spec.components.cozystack-api.values.cozystackAPI.nodeSelector
