@@ -65,10 +65,22 @@ cozystackOperator:
   platformSourceSecret: ''
 # Generic variant configuration (only used when cozystackOperator.variant=generic)
 cozystack:
-  # Kubernetes API server host (IP only, no protocol/port)
-  # Must be the INTERNAL IP of the control-plane node
-  # (the IP visible on the node's network interface, not a public/NAT IP)
-  # Used by the operator and networking components (cilium, kube-ovn)
+  # Where the Kubernetes API is reached from a node: an address, no protocol
+  # and no port. Read by the operator and by the networking components
+  # (cilium, kube-ovn), all of which run on the host network, so this is
+  # resolved on the node rather than inside the pod network.
+  #
+  # The plain answer is the internal address of a control-plane node — the one
+  # on the node's own interface, never a public or translated one. Note what
+  # that costs on a cluster with more than one control plane: every component
+  # then reaches the API through that single node, and loses the API when it
+  # does, however many other control planes are up.
+  #
+  # A cluster that offers the API on each node locally should be pointed at
+  # that instead, and keeps its redundancy: 127.0.0.1 where every node runs an
+  # API server, or the address of whatever the distribution listens on for
+  # this (Talos has KubePrism; the talos variant above uses it and does not
+  # read this value).
   apiServerHost: ""
   # Kubernetes API server port
   apiServerPort: "6443"

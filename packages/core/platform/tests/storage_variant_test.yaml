@@ -1,0 +1,90 @@
+# storage.variant chooses between the bundled LINSTOR control plane and
+# blockstor. The guard on changing it is the point of the suite: the two keep
+# their records in different stores, so a switch on a cluster that already
+# holds volumes leaves the data on the disks with nothing describing it.
+suite: storage control plane variant
+templates:
+  - templates/bundles/system.yaml
+release:
+  name: cozystack
+  namespace: cozy-system
+tests:
+  - it: runs the bundled LINSTOR control plane by default
+    values:
+      - ../values-isp-full.yaml
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - equal:
+          path: spec.variant
+          value: default
+
+  - it: runs blockstor when asked, on the generic variant too
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      storage:
+        variant: blockstor
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - equal:
+          path: spec.variant
+          value: blockstor
+
+  # The generic branch passes talos.enabled: false to the chart. That has to
+  # survive the variant switch, or the satellite configuration the chart still
+  # renders is wrong for the substrate.
+  - it: keeps the generic substrate setting across the switch
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      storage:
+        variant: blockstor
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - equal:
+          path: spec.components.linstor.values.talos.enabled
+          value: false
+
+  - it: refuses a variant that is not a storage control plane
+    values:
+      - ../values-isp-full.yaml
+    set:
+      storage:
+        variant: ceph
+    asserts:
+      - failedTemplate:
+          errorPattern: 'is not a storage variant'
+
+  # The scheduler and the storage layer have to move together: an endpoint
+  # left pointing at a controller that is not deployed is a silent loss of
+  # volume locality, not an install failure.
+  - it: moves the volume-aware scheduler with the storage variant
+    values:
+      - ../values-isp-full.yaml
+    set:
+      storage:
+        variant: blockstor
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor-scheduler
+    asserts:
+      - equal:
+          path: spec.variant
+          value: blockstor
+
+  - it: leaves the scheduler on the default variant by default
+    values:
+      - ../values-isp-full.yaml
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor-scheduler
+    asserts:
+      - equal:
+          path: spec.variant
+          value: default

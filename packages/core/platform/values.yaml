@@ -976,3 +976,19 @@ vmImport:
   # top-level `migrations` key above, which is the platform's own schema
   # migrations and has nothing to do with moving virtual machines.
   vddkImage: ""
+
+## Which storage control plane the platform runs.
+##
+## "default" is the bundled LINSTOR, whose controller is a JVM sized from the
+## machine's memory. "blockstor" keeps the same REST API and the same CSI
+## driver but replaces that controller and its satellites with Go binaries,
+## which is what makes storage fit on a node with a few gigabytes.
+##
+## The two keep their records in different stores and nothing migrates between
+## them, so changing this on a cluster that already holds volumes needs
+## acknowledgeVariantChange set to the variant being switched to -- and that
+## acknowledgement is a statement that the volumes are expendable or have
+## already been moved by hand.
+storage:
+  variant: default
+  acknowledgeVariantChange: ""

@@ -20,3 +20,19 @@ spec:
       install:
         namespace: cozy-linstor
         releaseName: linstor-scheduler
+  # The same scheduler against blockstor. Only the endpoint and the client
+  # certificate differ, and both have to: the LINSTOR controller Service does
+  # not exist in that shape, and blockstor verifies clients against its own CA.
+  - name: blockstor
+    dependsOn:
+    - cozystack.linstor
+    - cozystack.cert-manager
+    components:
+    - name: linstor-scheduler
+      path: system/linstor-scheduler
+      valuesFiles:
+      - values.yaml
+      - values-blockstor.yaml
+      install:
+        namespace: cozy-linstor
+        releaseName: linstor-scheduler

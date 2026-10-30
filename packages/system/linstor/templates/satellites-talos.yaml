@@ -1,3 +1,4 @@
+{{- if not .Values.externalController.enabled }}
 {{- if .Values.talos.enabled }}
 {{- $shutdown := .Values.talos.gracefulShutdown | default dict }}
 {{- $enabled := dig "enabled" false $shutdown }}
@@ -64,4 +65,5 @@ spec:
               hostPath:
                 path: /var/etc/lvm/archive
                 type: DirectoryOrCreate
+{{- end }}
 {{- end }}

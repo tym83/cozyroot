@@ -1,0 +1,16 @@
+# Point the volume-aware scheduler at blockstor instead of the LINSTOR
+# controller the default values name.
+#
+# The endpoint has to move because the Service it looks for does not exist in
+# this shape: the LINSTOR controller is not deployed at all. The client secret
+# has to move with it, because blockstor's API verifies every client
+# certificate against its own CA and refuses one issued from another.
+#
+# Getting either wrong is not an install failure. The extender simply never
+# answers, and the scheduler falls back to placing volumes without knowing
+# where their replicas are -- which looks like a working cluster until a node
+# is lost.
+linstor-scheduler:
+  linstor:
+    endpoint: "https://blockstor-apiserver.cozy-linstor.svc:3371"
+    clientSecret: "blockstor-apiserver-client-tls"

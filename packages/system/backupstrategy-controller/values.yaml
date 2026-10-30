@@ -102,7 +102,12 @@ backupStorage:
   #     self-signed external endpoint);
   #   - offline `helm template` / unit renders and the pre-reconcile first
   #     install, where the Secret lookup returns nothing.
-  endpoint: http://seaweedfs-s3.tenant-root.svc.cozy.local:8333
+  #
+  #   Empty means the in-cluster SeaweedFS of tenant-root, named in the cluster
+  #   domain the platform published. Spelling the host here instead would bake
+  #   in cozy.local and resolve nothing on a cluster that kept kubeadm's
+  #   cluster.local.
+  endpoint: ""
   # region is re-projected into cozy-backups-creds on the next reconcile
   # (1-minute tick for system namespaces, on-demand for tenant namespaces).
   # However, charts that consume the region via secretKeyRef in env vars —
