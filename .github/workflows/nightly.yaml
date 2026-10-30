@@ -42,7 +42,7 @@ jobs:
   mirror:
     name: Mirror images to GHCR
     if: vars.NIGHTLY_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -190,7 +190,7 @@ jobs:
   build-disk:
     name: Build & publish nocloud disk
     needs: [mirror]
-    runs-on: oracle-vm-4cpu-16gb-x86-64
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -246,7 +246,7 @@ jobs:
     # class has to be strictly larger, leaving the host its own cycles for
     # containerd and the runner agent. Enforced by
     # hack/sandbox-runner-headroom.bats.
-    runs-on: oracle-vm-32cpu-128gb-x86-64
+    runs-on: ${{ vars.RUNNER_XLARGE || 'oracle-vm-32cpu-128gb-x86-64' }}
     # Covers a green full suite. It does not cover a tenant-Kubernetes suite
     # running into its node-join deadline, so a red there can end as a
     # cancelled job. Held to one figure across every lane that runs the suite.

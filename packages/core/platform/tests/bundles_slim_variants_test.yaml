@@ -1150,7 +1150,9 @@ tests:
       - notExists:
           path: spec.components.kubeovn
 
-  - it: pins cozystack-api to generic control-plane nodes on isp-slim-generic
+  # The generic variants used to hand cozystack-api a nodeSelector its chart
+  # never reads. Nothing should emit one now.
+  - it: sends cozystack-api no node selector on isp-slim-generic
     values:
       - ../values-isp-slim-generic.yaml
     template: templates/bundles/system.yaml
@@ -1158,10 +1160,8 @@ tests:
       path: metadata.name
       value: cozystack.cozystack-engine
     asserts:
-      - equal:
+      - notExists:
           path: spec.components.cozystack-api.values.cozystackAPI.nodeSelector
-          value:
-            node-role.kubernetes.io/control-plane: "true"
 
   - it: uses noop networking on isp-hosted-slim
     values:

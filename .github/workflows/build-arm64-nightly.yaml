@@ -25,7 +25,7 @@ permissions:
 jobs:
   build-arm64:
     name: Build main arm64 images
-    runs-on: oracle-vm-24cpu-96gb-arm64
+    runs-on: ${{ vars.RUNNER_ARM64 || 'ubuntu-24.04-arm' }}
     # Starts from the rc leg's budget; re-measure after the first runs.
     timeout-minutes: 120
     permissions:

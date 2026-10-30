@@ -159,13 +159,14 @@
 
 # Cozystack Engine
 {{- $cozystackEngineComponents := dict -}}
-{{- /* For generic k8s, DaemonSets with control-plane nodeSelector need value "true" */ -}}
-{{- if has .Values.bundles.system.variant (list "isp-full-generic" "isp-slim-generic") -}}
-{{- $genericNodeSelector := dict "node-role.kubernetes.io/control-plane" "true" -}}
-{{- /* cozystack-api DaemonSet */ -}}
-{{- $apiValues := dict "cozystackAPI" (dict "nodeSelector" $genericNodeSelector) -}}
-{{- $_ := set $cozystackEngineComponents "cozystack-api" (dict "values" $apiValues) -}}
-{{- end -}}
+{{- /* The generic variants used to pin cozystack-api to control-plane nodes
+       through a nodeSelector of node-role.kubernetes.io/control-plane: "true".
+       Nothing read it: cozystack-api is a Deployment now, and its chart places
+       it with a preferred nodeAffinity matching that key by existence, which
+       is both value-agnostic and not a hard requirement. The selector was
+       worse than dead -- it named a value only k3s and RKE2 write, so a
+       kubeadm cluster, whose label carries the empty value, would have matched
+       nothing had anything consumed it. */ -}}
 {{- /* Telemetry is collected by TWO components: cozystack-operator (cluster
        facts) and cozystack-controller (application counts). The operator is
        switched off at install time via cozystackOperator.disableTelemetry on

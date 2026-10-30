@@ -249,7 +249,7 @@ jobs:
   promote:
     name: Promote ${{ needs.parse.outputs.rc_tag }}
     needs: parse
-    runs-on: [oracle-vm-4cpu-16gb-x86-64]
+    runs-on: ${{ vars.RUNNER_SMALL || 'ubuntu-latest' }}
     timeout-minutes: 45
     env:
       # The pipe falls back to direct on any proxy error (hack/common-envs.mk).
