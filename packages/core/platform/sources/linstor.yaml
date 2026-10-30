@@ -39,3 +39,56 @@ spec:
         releaseName: linstor
         dependsOn:
         - piraeus-operator
+  # The same storage service with blockstor in place of the LINSTOR controller
+  # and satellites: a Go control plane over the same REST API, so piraeus still
+  # provides linstor-csi and the chart still renders the LinstorCluster -- but
+  # pointed at an external controller, which is what stops the operator from
+  # deploying the JVM controller and its satellites. Everything lands in the
+  # same namespace as the default variant so the chart reaches blockstor's CA
+  # Issuer and client Secret, both of which are namespace-scoped.
+  - name: blockstor
+    dependsOn:
+    - cozystack.networking
+    - cozystack.cert-manager
+    - cozystack.victoria-metrics-operator
+    - cozystack.reloader
+    - cozystack.snapshot-controller
+    components:
+    - name: blockstor-crds
+      path: system/blockstor-crds
+      install:
+        namespace: cozy-linstor
+        releaseName: blockstor-crds
+    - name: blockstor
+      path: system/blockstor
+      install:
+        privileged: true
+        namespace: cozy-linstor
+        releaseName: blockstor
+        dependsOn:
+        - blockstor-crds
+    - name: piraeus-operator-crds
+      path: system/piraeus-operator-crds
+      install:
+        privileged: true
+        namespace: cozy-linstor
+        releaseName: piraeus-operator-crds
+    - name: piraeus-operator
+      path: system/piraeus-operator
+      install:
+        namespace: cozy-linstor
+        releaseName: piraeus-operator
+        dependsOn:
+        - piraeus-operator-crds
+    - name: linstor
+      path: system/linstor
+      valuesFiles:
+      - values.yaml
+      - values-blockstor.yaml
+      install:
+        privileged: true
+        namespace: cozy-linstor
+        releaseName: linstor
+        dependsOn:
+        - piraeus-operator
+        - blockstor
