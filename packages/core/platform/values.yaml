@@ -118,6 +118,12 @@ networking:
   podCIDR: "10.244.0.0/16"
   podGateway: "10.244.0.1"
   serviceCIDR: "10.96.0.0/16"
+  # The cluster DNS address. Empty derives it from serviceCIDR the way every
+  # installer does, as its tenth address. It is named here because cozyplane
+  # has to be told it: a VPC gateway opens that one address so a tenant pod
+  # resolves with a stock resolv.conf, and a wrong value is not an error, just
+  # tenants that cannot resolve.
+  clusterDNS: ""
   joinCIDR: "100.64.0.0/16"
   # KubeOVN master nodes override (optional)
   # By default, KubeOVN helm chart uses `lookup` to find control-plane nodes
