@@ -1,0 +1,17 @@
+# The kube-proxy replacement takes over Services for the whole node, so it runs
+# everywhere and must not be evicted before the workloads that depend on it.
+suite: cozyplane kube-proxy replacement
+templates:
+  - templates/daemonset.yaml
+release:
+  name: cozyplane-kpr
+  namespace: cozy-cozyplane
+tests:
+  - it: runs on every node, on the host network
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - equal:
+          path: spec.template.spec.hostNetwork
+          value: true

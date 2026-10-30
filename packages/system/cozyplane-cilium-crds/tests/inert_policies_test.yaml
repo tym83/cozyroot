@@ -1,0 +1,16 @@
+# These CRDs exist so that charts embedding CiliumNetworkPolicy objects install
+# on a cluster with no Cilium. Nothing enforces them, which is the whole point:
+# a chart that declares a policy must not fail to install, and must not be
+# believed when it looks as though the policy is in force.
+suite: inert Cilium policy CRDs
+templates:
+  - templates/*.yaml
+tests:
+  - it: renders Cilium policy CRDs and nothing else
+    asserts:
+      - equal:
+          path: kind
+          value: CustomResourceDefinition
+      - equal:
+          path: spec.group
+          value: cilium.io
