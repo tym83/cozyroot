@@ -243,3 +243,34 @@ tests:
           path: spec.template.spec.volumes
           content:
             name: lvm-conf
+
+  # The declaration is metadata: the process binds what it binds. Its value is
+  # that `kubectl get pod -o wide` shows the clash with node-exporter before it
+  # happens, instead of a crash loop showing it afterwards.
+  - it: declares the port the pinned image actually binds
+    template: templates/satellite.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[?(@.name=="snap-stream")].containerPort
+          value: 9100
+      - equal:
+          path: spec.template.spec.containers[0].ports[?(@.name=="snap-stream")].hostPort
+          value: 9100
+
+  # Kept movable for the release that carries upstream's move to 3372, so the
+  # chart needs an edit to one value rather than a patch to a template.
+  - it: follows the stream port where it is pointed
+    template: templates/satellite.yaml
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    set:
+      satellite:
+        snapshotStreamPort: 3372
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[?(@.name=="snap-stream")].containerPort
+          value: 3372

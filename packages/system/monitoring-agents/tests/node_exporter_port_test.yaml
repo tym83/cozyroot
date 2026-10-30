@@ -1,0 +1,58 @@
+# 9100 is node-exporter's well-known port, not a reserved one. An agent running
+# with host networking can hold it -- blockstor's satellite does, in the release
+# pinned today -- and node-exporter then crash-loops on "address already in use"
+# while the agent looks healthy.
+#
+# Moving it is one value, and that is the point of this suite: the listener, the
+# container port and both probes have to move together. Moving only the listener
+# leaves the probes checking a port nothing answers on, so the container starts,
+# serves correctly, and is killed by the kubelet anyway -- which reads as the
+# same crash loop and hides that a port was ever involved. Measured the long way
+# round on a cluster before this suite existed.
+suite: where node-exporter listens
+templates:
+  - charts/prometheus-node-exporter/templates/daemonset.yaml
+release:
+  name: monitoring-agents
+  namespace: cozy-monitoring
+tests:
+  - it: serves and is probed on the well-known port by default
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[?(@.name=="node-exporter")].args
+          content: --web.listen-address=[$(HOST_IP)]:9100
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="node-exporter")].ports[0].containerPort
+          value: 9100
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="node-exporter")].livenessProbe.httpGet.port
+          value: 9100
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="node-exporter")].readinessProbe.httpGet.port
+          value: 9100
+
+  - it: moves the listener and both probes together
+    set:
+      prometheus-node-exporter:
+        service:
+          port: 9102
+          targetPort: 9102
+    documentSelector:
+      path: kind
+      value: DaemonSet
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[?(@.name=="node-exporter")].args
+          content: --web.listen-address=[$(HOST_IP)]:9102
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="node-exporter")].ports[0].containerPort
+          value: 9102
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="node-exporter")].livenessProbe.httpGet.port
+          value: 9102
+      - equal:
+          path: spec.template.spec.containers[?(@.name=="node-exporter")].readinessProbe.httpGet.port
+          value: 9102

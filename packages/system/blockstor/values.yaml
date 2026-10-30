@@ -50,6 +50,18 @@ satellite:
     limits:
       cpu: 500m
       memory: 512Mi
+  ## The port the satellite serves snapshot streams on, as the pinned image
+  ## binds it rather than as a later manifest declares it.
+  ##
+  ## v0.1.17 uses 9100, which is prometheus-node-exporter's well-known port, so
+  ## the two cannot both run on a node: whichever starts second fails to bind.
+  ## Upstream moved the stream to 3372 after that release and no release
+  ## carries the move yet, so this stays at what the image does until one does.
+  ##
+  ## The declaration is metadata -- the process binds what it binds -- so the
+  ## number here does not change behaviour. It changes whether the collision is
+  ## visible before it happens.
+  snapshotStreamPort: 9100
   ## Hand LVM a configuration that does not wait for udev.
   ##
   ## LVM asks the kernel for a mapping and then waits for udev to publish the
