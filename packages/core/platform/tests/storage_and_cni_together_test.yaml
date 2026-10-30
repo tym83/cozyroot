@@ -1,6 +1,7 @@
 # The two switches are independent, and each has its own suite. This one pins
 # that they compose: a small cluster wants both, and the pair is what the
-# packages are measured as.
+# packages are measured as. The tenant API stays off, because this platform
+# serves its API group already -- see the cozyplane suite for that refusal.
 suite: blockstor and cozyplane in one bundle
 templates:
   - templates/bundles/system.yaml
@@ -17,11 +18,11 @@ tests:
       networking:
         cni: cozyplane
         cozyplane:
-          apiVariant: default
+          apiVariant: noop
     asserts:
       - equal: {path: spec.variant, value: blockstor}
         documentSelector: {path: metadata.name, value: cozystack.linstor}
       - equal: {path: spec.variant, value: cozyplane-generic}
         documentSelector: {path: metadata.name, value: cozystack.networking}
-      - equal: {path: spec.variant, value: default}
+      - equal: {path: spec.variant, value: noop}
         documentSelector: {path: metadata.name, value: cozystack.cozyplane-api}
