@@ -119,3 +119,26 @@ controller:
   livenessProbe:
     timeoutSeconds: 5
     failureThreshold: 6
+# Point the storage service at an external LINSTOR-compatible controller --
+# blockstor -- instead of the one piraeus-operator deploys. See
+# values-blockstor.yaml, which the platform layers on for the blockstor
+# variant; this block is the off switch and the knobs that variant does not
+# need to restate.
+externalController:
+  enabled: false
+  # Where blockstor's mutual-TLS API answers. Empty is resolved from the
+  # release namespace, which is where the platform installs blockstor, so an
+  # override is only needed when the two are deliberately separated -- and then
+  # the CA Issuer below has to be reachable from here too, which a namespaced
+  # Issuer is not.
+  url: ""
+  # The cert-manager Issuer the CSI driver's client certificates are issued
+  # from. It has to be the CA blockstor verifies clients against, or the API
+  # refuses the connection rather than the request.
+  caIssuer: blockstor-api-ca
+  # The label the satellites are selected by once piraeus no longer provides
+  # them. Nothing is expected to carry it; it exists so the intent is visible
+  # on the live object rather than being an empty selector someone later
+  # "fixes".
+  satelliteNodeSelector:
+    piraeus.io/satellite: "provided-by-blockstor"

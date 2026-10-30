@@ -285,3 +285,35 @@ sliced into /24s ever allowed.
 {{- define "cozystack.platform.ciliumPoolRange" -}}
 {{- join ".." (splitList " " (include "cozystack.platform.ciliumPoolBounds" .)) -}}
 {{- end }}
+
+{{/*
+Emits the storage Package, choosing between the bundled LINSTOR control plane
+and blockstor. Call as (list $ <components>).
+
+Switching the variant of a live Package deletes every HelmRelease the new one
+does not install, and there is no migration between the two stores: the
+resource records live in LINSTOR's own database on one side and in CRDs on the
+other, so a switch leaves the volumes on the disks with nothing describing
+them. The acknowledgement therefore names the target variant, so a value left
+set after one switch does not cover the next. Inert where lookup returns
+nothing: helm template, client-side dry-run, first install.
+*/}}
+{{- define "cozystack.platform.package.storage" -}}
+{{- $root := index . 0 -}}
+{{- $components := index . 1 -}}
+{{- $variant := dig "variant" "default" ($root.Values.storage | default dict) | toString -}}
+{{- if eq $variant "blockstor" -}}
+{{- $variant = "blockstor" -}}
+{{- else if ne $variant "default" -}}
+{{- fail (printf "storage.variant: %q is not a storage variant; use \"default\" for the bundled LINSTOR control plane or \"blockstor\"" $variant) -}}
+{{- end -}}
+{{- $live := lookup "cozystack.io/v1alpha1" "Package" "" "cozystack.linstor" -}}
+{{- if $live -}}
+{{- $liveVariant := default "default" (dig "spec" "variant" "" $live) -}}
+{{- $ack := dig "acknowledgeVariantChange" "" ($root.Values.storage | default dict) | toString -}}
+{{- if and (ne $liveVariant $variant) (ne $ack $variant) -}}
+{{- fail (printf "the live cozystack.linstor Package runs variant %q and this render would switch it to %q. The two keep their records in different stores -- LINSTOR's own database on one side, CRDs on the other -- and nothing migrates between them, so the switch leaves the volumes on the disks with nothing describing them and every PersistentVolume unusable. Either restore the previous storage.variant, or, on a cluster whose volumes are expendable or already migrated by hand, set storage.acknowledgeVariantChange: %q in the platform values to confirm this exact switch." $liveVariant $variant $variant) -}}
+{{- end -}}
+{{- end -}}
+{{- include "cozystack.platform.package" (list "cozystack.linstor" $variant $root $components) }}
+{{- end }}

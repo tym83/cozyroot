@@ -1,0 +1,20 @@
+# Run the storage service against blockstor instead of the bundled LINSTOR.
+#
+# piraeus keeps providing linstor-csi, which is the part that turns a PVC into
+# a replicated volume, and keeps rendering the LinstorCluster. What changes is
+# where that cluster's controller is: an external URL rather than a Deployment
+# the operator owns. The operator then stops deploying the JVM controller and
+# re-renders the CSI driver against blockstor's API.
+#
+# The satellites go with it. blockstor ships its own per-node agent, and two
+# agents on one node each render .res files for the same resource, which makes
+# drbdadm see two claims on one device minor and refuse every operation. They
+# are turned off by selecting nodes with a label nothing carries -- on a
+# LinstorCluster the node selector governs satellites alone, so the CSI
+# components are unaffected.
+externalController:
+  enabled: true
+
+# The LINSTOR controller is not deployed in this mode, so its JVM tuning is
+# inert. Left at the chart defaults rather than removed: a cluster switched
+# back to the bundled controller should find them unchanged.

@@ -1,0 +1,117 @@
+{{- /*
+The mutual-TLS chain for the apiserver's only network-exposed listener.
+
+  ca-bootstrapper (self-signed Issuer)
+    -> blockstor-api-ca (CA Certificate)
+         -> blockstor-api-ca (CA Issuer)
+              |-> blockstor-apiserver-server (serving cert, Service DNS SANs)
+              '-> blockstor-apiserver-client (client cert for in-cluster consumers)
+
+The listener runs RequireAndVerifyClientCert and checks every client against
+the ca.crt of its own Secret, so a consumer needs a certificate from this same
+CA -- which is what the client Certificate below is for. The apiserver
+re-reads all three files on rotation through an fsnotify watch, so nothing in
+this chart carries a reloader annotation: an annotation would restart pods
+cert-manager has already updated in place.
+*/ -}}
+{{- $clusterDomain := .Values.clusterDomain | default (index (.Values._cluster | default dict) "cluster-domain") | default "cozy.local" }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: ca-bootstrapper
+  namespace: {{ .Release.Namespace }}
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: blockstor-api-ca
+  namespace: {{ .Release.Namespace }}
+spec:
+  commonName: blockstor-api-ca
+  secretName: blockstor-api-ca
+  duration: {{ .Values.tls.caDuration }}
+  isCA: true
+  privateKey:
+    rotationPolicy: Never
+  usages:
+    - signing
+    - key encipherment
+    - cert sign
+  issuerRef:
+    name: ca-bootstrapper
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: blockstor-api-ca
+  namespace: {{ .Release.Namespace }}
+spec:
+  ca:
+    secretName: blockstor-api-ca
+---
+{{- /*
+The SANs cover both Service names that resolve to the apiserver pods: its own,
+and the legacy blockstor-controller name that older LS_CONTROLLERS values and
+the upstream reference wiring still carry. Dropping the legacy name would make
+a correct-looking endpoint fail certificate validation rather than connection,
+which is the harder failure to read.
+*/ -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: blockstor-apiserver-server
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: blockstor-apiserver-server-tls
+  duration: {{ .Values.tls.certDuration }}
+  renewBefore: {{ .Values.tls.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - server auth
+    - digital signature
+    - key encipherment
+  dnsNames:
+{{- range $svc := list "blockstor-apiserver" "blockstor-controller" }}
+    - {{ $svc }}
+    - {{ $svc }}.{{ $.Release.Namespace }}
+    - {{ $svc }}.{{ $.Release.Namespace }}.svc
+    - {{ $svc }}.{{ $.Release.Namespace }}.svc.{{ $clusterDomain }}
+{{- end }}
+  issuerRef:
+    name: blockstor-api-ca
+    kind: Issuer
+---
+{{- /*
+The client certificate every in-cluster consumer presents: linstor-csi, the HA
+and affinity controllers, and the linstor CLI. Its Secret carries ca.crt as
+well, so the consumer verifies the apiserver against the same CA it was issued
+from. A consumer in another namespace needs its own Certificate from this
+Issuer -- a Secret does not cross namespaces.
+*/ -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: blockstor-apiserver-client
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: blockstor-apiserver-client-tls
+  commonName: blockstor-apiserver-client
+  duration: {{ .Values.tls.certDuration }}
+  renewBefore: {{ .Values.tls.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - client auth
+    - digital signature
+    - key encipherment
+  issuerRef:
+    name: blockstor-api-ca
+    kind: Issuer
