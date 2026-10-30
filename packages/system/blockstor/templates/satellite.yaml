@@ -172,9 +172,19 @@ spec:
             Under hostNetwork these are the node's real ports, so they have to
             stay clear of the DRBD range and of node-exporter.
             */}}
+            {{- /*
+            The port the pinned release actually binds, which is not the one a
+            newer manifest declares. v0.1.17 carries the snapshot stream on
+            9100; upstream moved it to 3372 afterwards, and no release carries
+            that yet. 9100 is node-exporter's well-known port, so on a cluster
+            with monitoring the two collide -- and the declaration here is only
+            metadata, so a wrong number hides the collision rather than causing
+            it. Declaring what the image binds is what makes the clash visible
+            in `kubectl get pod -o wide` instead of in a crash loop.
+            */}}
             - name: snap-stream
-              containerPort: 3372
-              hostPort: 3372
+              containerPort: {{ .Values.satellite.snapshotStreamPort }}
+              hostPort: {{ .Values.satellite.snapshotStreamPort }}
               protocol: TCP
             - name: healthz
               containerPort: 9101

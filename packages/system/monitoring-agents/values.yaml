@@ -545,6 +545,18 @@ scrapeRules:
 # than a fitted ceiling — fluent-bit in particular scales with log volume, which
 # a dev cluster understates.
 prometheus-node-exporter:
+  # The port node-exporter serves on, and the port its probes check.
+  #
+  # 9100 is its well-known port and the default here, but it is not reserved:
+  # a storage agent running with host networking can hold it, and then
+  # node-exporter crash-loops on "address already in use" while the agent looks
+  # healthy. Both numbers move together on purpose -- moving only the listener
+  # leaves the probes checking a port nothing answers on, so the container
+  # starts, serves, and is killed by the kubelet anyway, which reads as the
+  # same crash loop and hides that the port was ever the problem.
+  service:
+    port: 9100
+    targetPort: 9100
   # 14d peak 42Mi.
   resources:
     requests:
