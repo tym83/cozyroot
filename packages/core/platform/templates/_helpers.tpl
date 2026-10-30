@@ -118,13 +118,30 @@ on the slim ones. Takes the same arguments as cozystack.platform.package.
 
 {{/*
 Emits the cozystack.networking Package. Call as
-(list $ <components> <full variant> <slim variant>). The slim variants run Cilium
-alone: no KubeOVN component, and Cilium L2 announcements stand in for MetalLB.
+(list $ <components> <full variant> <slim variant> <cozyplane variant>). The slim
+variants run Cilium alone: no KubeOVN component, and Cilium L2 announcements stand
+in for MetalLB.
+
+networking.cni: cozyplane replaces both with an eBPF overlay that carries tenant
+VPCs without Open vSwitch, which is the only route to tenant networking on a
+kernel built without CONFIG_OPENVSWITCH. It takes none of the components
+assembled for the other two: the KubeOVN address plan and the Cilium values
+describe datapaths it does not run, and passing them through would configure
+nothing while looking as though it did.
 */}}
 {{- define "cozystack.platform.package.networking" -}}
 {{- $root := index . 0 -}}
 {{- $components := index . 1 -}}
 {{- $variant := index . 2 -}}
+{{- $cni := dig "cni" "cilium" ($root.Values.networking | default dict) | toString -}}
+{{- if eq $cni "cozyplane" -}}
+{{- if dig "encryption" "enabled" false ($root.Values.networking | default dict) -}}
+{{- fail "networking.encryption.enabled is not supported with networking.cni: cozyplane -- the KubeOVN IPsec switch it drives is not part of this datapath" -}}
+{{- end -}}
+{{- include "cozystack.platform.package" (list "cozystack.networking" (index . 4) $root dict) }}
+{{- else if ne $cni "cilium" -}}
+{{- fail (printf "networking.cni: %q is not a CNI this platform installs; use \"cilium\" or \"cozyplane\"" $cni) -}}
+{{- else -}}
 {{- if include "cozystack.platform.slim" $root -}}
 {{- if dig "encryption" "enabled" false ($root.Values.networking | default dict) -}}
 {{- fail "networking.encryption.enabled is not supported on the slim variants: their Cilium-only datapath has no encryption wiring yet" -}}
@@ -136,6 +153,27 @@ alone: no KubeOVN component, and Cilium L2 announcements stand in for MetalLB.
 {{- $_ := set $components "cilium" (dict "values" (dict "cilium" $cilium)) -}}
 {{- end -}}
 {{- include "cozystack.platform.package" (list "cozystack.networking" $variant $root $components) }}
+{{- end -}}
+{{- end }}
+
+{{/*
+Emits the cozystack.cozyplane-api Package, which serves cozyplane's tenant
+group. It is noop on any other CNI, and on cozyplane only when tenancy is
+switched off: without it VPC, VPCBinding, SecurityGroup and HostFirewall have
+no CRDs anywhere and simply do not exist, so the cluster has the default pod
+network and the upstream NetworkPolicy on it and nothing more.
+*/}}
+{{- define "cozystack.platform.package.cozyplaneApi" -}}
+{{- $root := index . 0 -}}
+{{- $net := $root.Values.networking | default dict -}}
+{{- $variant := "noop" -}}
+{{- if eq (dig "cni" "cilium" $net | toString) "cozyplane" -}}
+{{- $variant = dig "cozyplane" "apiVariant" "default" $net | toString -}}
+{{- if not (has $variant (list "noop" "default" "replicated-etcd")) -}}
+{{- fail (printf "networking.cozyplane.apiVariant: %q is not a variant of cozystack.cozyplane-api; use \"default\" for one etcd member on a replicated volume, \"replicated-etcd\" for three of its own, or \"noop\" to run without tenant networking" $variant) -}}
+{{- end -}}
+{{- end -}}
+{{- include "cozystack.platform.package" (list "cozystack.cozyplane-api" $variant $root dict) }}
 {{- end }}
 
 {{- define "cozystack.platform.package.full.default" -}}
