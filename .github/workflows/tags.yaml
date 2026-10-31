@@ -169,7 +169,13 @@ jobs:
     # attempt here was killed at exactly 120 minutes, still building. The
     # `runner` context is not available in a job-level timeout, so this is a
     # variable rather than a condition.
-    timeout-minutes: ${{ vars.BUILD_TIMEOUT_MINUTES || 120 }}
+    #
+    # fromJSON because a repository variable is a string and this field takes a
+    # number: given a string, the job is silently never created -- the run
+    # starts, the arm64 leg builds, and the amd64 leg simply is not there, with
+    # no error anywhere to say why. The default is quoted for the same reason,
+    # so both sides of the fallback are parsed the same way.
+    timeout-minutes: ${{ fromJSON(vars.BUILD_TIMEOUT_MINUTES || '120') }}
     env:
       # The pipe falls back to direct on any proxy error (hack/common-envs.mk).
       GOPROXY: "https://proxy.golang.org|direct"
