@@ -1,9 +1,8 @@
 # Injected by the platform from the cozystack-values Secret. The empty
 # default keeps the chart renderable on its own, outside a cluster.
 _cluster: {}
-
 cozystackAPI:
-  image: ghcr.io/cozystack/cozystack/cozystack-api:v1.6.0@sha256:c4d374a9bc5e6f6e66d24b29396f1eae9d7f06fd268ff767d05c45ca35e84e2e
+  image: ghcr.io/tym83/cozyroot/cozystack-api:v1.7.0-alpha.12@sha256:c0741897b3354d4887335c61c983c642d8dadf1adb26e335f7a779190ce9d99a
   replicas: 2
   # Empty by default: no resources block is rendered, so requests and limits are
   # opt-in. Idle usage (measured) is ~130-143Mi — keep a limit above that.

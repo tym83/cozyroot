@@ -15,13 +15,12 @@ opensearch-operator:
     # outside the first-party set hack/lib/image-refs.sh collects for promote,
     # retag and mirror. `make image` rewrites both keys on every build.
     image:
-      repository: ghcr.io/cozystack/cozystack/opensearch-operator
-      tag: v2.8.0@sha256:cbe6b50f13aa5abf338209d38dfcd80e73296e97510465b5fca73a0130bfaad7
+      repository: ghcr.io/tym83/cozyroot/opensearch-operator
+      tag: v1.7.0-alpha.12@sha256:0d43a62631098ea1aaa73bb68211936e57bb25d9719ec4f495ca62ad4a3106df
   kubeRbacProxy:
     image:
       # gcr.io/kubebuilder/kube-rbac-proxy was sunset; use the original upstream
       repository: "quay.io/brancz/kube-rbac-proxy"
-
 sysctl:
   # busybox carries the sysctl applet and doubles as the idle main container.
   # Third-party pass-through pinned by digest, the same reference the kubernetes

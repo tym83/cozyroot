@@ -1,1 +1,1 @@
-quay.io/outline/shadowbox:v1.12.3@sha256:545c6f7c7261bb30ae1dffe24a6fca5f8512f5d17c72cfb9e410e7e655444e62
+ghcr.io/tym83/cozyroot/shadowbox:v1.7.0-alpha.12@sha256:d3a64078c11759dbc9da728e617b5a278aca251e2329c01e517c275b14c53358

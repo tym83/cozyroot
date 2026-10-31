@@ -1,5 +1,5 @@
 backupController:
-  image: "ghcr.io/cozystack/cozystack/backup-controller:v1.6.0@sha256:fc4571354413d86ed11fa38dee8fd3d2d879e11c48d7d92c28630b2d54a2bcbb"
+  image: "ghcr.io/tym83/cozyroot/backup-controller:v1.7.0-alpha.12@sha256:0f74d64a7f18d90ad93e6e9acffe6c8999625e725280e91edb2b3e436c407b29"
   # Where this controller may run. The platform threads these through
   # spec.components.<name>.values of the Package, so a cluster can put the
   # component on named nodes without the chart being edited in place.

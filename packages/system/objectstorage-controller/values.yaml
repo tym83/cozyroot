@@ -1,6 +1,6 @@
 objectstorage:
   controller:
-    image: "ghcr.io/cozystack/cozystack/objectstorage-controller:v1.6.0@sha256:9c284ef4f2fbbf5ee3ccd75f86ec6c993dc60aa673c6df3f9bd15d21a7e8485c"
+    image: "ghcr.io/tym83/cozyroot/objectstorage-controller:v1.7.0-alpha.12@sha256:a24d6e66a6e83efaac99d5f84faae3a00a1608e6f476c7ec2cd27ffde4135f2a"
     # A standby, not a second writer: the controller takes a Lease, and the
     # image carries a patch shortening it to the ordinary Kubernetes timings,
     # so a standby takes over in about fifteen seconds. With one replica that
@@ -19,10 +19,10 @@ objectstorage:
     affinity:
       podAntiAffinity:
         preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                app: container-object-storage-interface-controller
-            topologyKey: kubernetes.io/hostname
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: container-object-storage-interface-controller
+              topologyKey: kubernetes.io/hostname
     tolerations: []

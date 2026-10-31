@@ -1,5 +1,5 @@
 migrationController:
-  image: "ghcr.io/cozystack/cozystack/migration-controller:latest"
+  image: "ghcr.io/tym83/cozyroot/migration-controller:v1.7.0-alpha.12@sha256:9a5f9d4067796aa47a3b3a42d10d470f4411b34d9fc3214253ec005b3afa2dc0"
   # Where this controller may run. The platform threads these through
   # spec.components.<name>.values of the Package, so a cluster can put the
   # component on named nodes without the chart being edited in place.
@@ -27,7 +27,6 @@ migrationController:
     limits:
       cpu: 500m
       memory: 256Mi
-
 ## The VMware Virtual Disk Development Kit image, delivered from the platform.
 ## Never a tenant value: naming an image the cluster will run is not a tenant's
 ## decision, and this one is built from a proprietary SDK that Cozystack can

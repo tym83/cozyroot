@@ -13,7 +13,7 @@ migrations:
   # below therefore lags targetVersion in-tree by design; run-migrations.sh
   # refuses to advance past a migration file missing from the image (exit 1), so
   # a stale pin fails loudly rather than silently skipping the etcd adoption.
-  image: ghcr.io/cozystack/cozystack/platform-migrations:v1.6.0@sha256:6777042e3e9c6bad76e7d96fb64baa115061975f39061cb3ede84e21d0e2213f
+  image: ghcr.io/tym83/cozyroot/platform-migrations:v1.7.0-alpha.12@sha256:bd088d9636614f767201007a5e6ef0041befc23fb087148a96d72147a8d0b2e1
   targetVersion: 61
   # Adopt legacy etcd clusters onto the v1alpha2 operator WITHOUT the mandatory
   # pre-adoption safety snapshot (migration 50). Leave false unless migration 50
@@ -227,7 +227,6 @@ networking:
   #   resources:
   #     limits:
   #       memory: 8Gi
-
 # Service publishing and ingress configuration
 publishing:
   host: "example.org"
@@ -775,7 +774,6 @@ monitoring:
 # cozystack.cozystack-platform Package — see docs/operations/backup-classes.md.
 # Empty (the default) forwards nothing and keeps the child chart defaults.
 backupStorage: {}
-
 # backupStrategyController overrides for the platform-managed strategy CRs,
 # forwarded verbatim into the same Package as
 # components.backupstrategy-controller.values.backupStrategyController. The
@@ -977,7 +975,6 @@ gpu:
   # missing entries).
   vgpuDeviceManager:
     enabled: false
-
 # VM import from external virtualization platforms (opt-in; see the iaas bundle).
 vmImport:
   # Container image carrying the VMware Virtual Disk Development Kit, used by
@@ -995,7 +992,6 @@ vmImport:
   # top-level `migrations` key above, which is the platform's own schema
   # migrations and has nothing to do with moving virtual machines.
   vddkImage: ""
-
 ## Which storage control plane the platform runs.
 ##
 ## "default" is the bundled LINSTOR, whose controller is a JVM sized from the
