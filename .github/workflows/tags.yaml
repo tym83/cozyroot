@@ -264,6 +264,40 @@ jobs:
             }
             core.setOutput('branch', branch);
 
+      # A GitHub-hosted runner carries roughly 14 GB free on the filesystem
+      # holding /var/lib/docker, and the whole packages tree does not fit: the
+      # amd64 leg ran for an hour and three quarters and then died with "No
+      # space left on device" -- from the runner's own log writer, not from the
+      # build, so the job ends with no usable error of its own.
+      #
+      # Two moves, because either alone is marginal. The preinstalled
+      # toolchains are worth tens of gigabytes and nothing here uses them. The
+      # second partition, mounted at /mnt, is larger than the root one and is
+      # where the image layers belong; docker has to be stopped to move its
+      # root, and this must therefore run before buildx is set up.
+      #
+      # Guarded on runner.environment: upstream's runners are persistent, and
+      # deleting their system directories or relocating their docker root would
+      # outlive this job.
+      - name: Make room on the runner
+        if: ${{ steps.check_release.outputs.release_exists == 'false' && runner.environment == 'github-hosted' }}
+        run: |
+          set -eux
+          df -h / /mnt || true
+          # /opt/hostedtoolcache is deliberately left alone: later steps and
+          # actions resolve their toolchains through it.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /usr/local/.ghcup \
+                      /usr/local/lib/node_modules
+          # The images the runner ships with are not ones this build pulls, so
+          # the old root is discarded rather than copied across.
+          sudo systemctl stop docker
+          sudo rm -rf /var/lib/docker
+          sudo mkdir -p /mnt/docker
+          sudo ln -s /mnt/docker /var/lib/docker
+          sudo systemctl start docker
+          df -h / /mnt
+
       - name: Checkout code
         if: steps.check_release.outputs.release_exists == 'false'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
