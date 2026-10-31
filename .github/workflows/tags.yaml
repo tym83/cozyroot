@@ -1,5 +1,14 @@
 name: Versioned Tag
 
+env:
+  # Where the built images go, as in pull-requests.yaml. Unset, it is this
+  # repository's own namespace on the GitHub registry, which the built-in token
+  # can write to. Without it the build jobs here fall through to the Makefile
+  # default in hack/common-envs.mk, which names upstream's registry: a fork
+  # would build a whole release and push it where its token has no write
+  # access, after the arm64 leg has already run.
+  REGISTRY: ${{ vars.REGISTRY || format('ghcr.io/{0}', github.repository) }}
+
 on:
   push:
     tags:
@@ -81,13 +90,18 @@ jobs:
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
 
+      # Only where a cache registry needing its own credentials is configured.
+      # A fork has no OCIR secrets, and docker/login-action fails the job on an
+      # empty username rather than skipping -- which is what killed the first
+      # arm64 tag build here. Without it CACHE_REGISTRY falls back to the
+      # repository's own registry, already logged in above.
       - name: Login to OCIR (build cache)
-        if: steps.check_release.outputs.release_exists == 'false'
+        if: ${{ steps.check_release.outputs.release_exists == 'false' && vars.REGISTRY_HOST != '' }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ secrets.OCIR_USER }}
           password: ${{ secrets.OCIR_TOKEN }}
-          registry: iad.ocir.io
+          registry: ${{ vars.REGISTRY_HOST }}
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
 
@@ -121,7 +135,7 @@ jobs:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
           BUILDER: ${{ steps.buildx.outputs.name }}
           PLATFORM: linux/arm64
-          CACHE_REGISTRY: iad.ocir.io/idyksih5sir9/cozystack
+          CACHE_REGISTRY: ${{ vars.CACHE_REGISTRY || format('ghcr.io/{0}', github.repository) }}
           # Read the arm64 cache build-arm64-nightly.yaml keeps warm; a release
           # build never writes one.
           CACHE_TAG: buildcache-arm64
@@ -280,13 +294,18 @@ jobs:
       # writes to OCIR. Release builds push images to GHCR but warm-start from
       # that cache — without it every tag build on an ephemeral runner is 100%
       # cold (the persistent runner used to warm-start from local buildkit state).
+      # Only where a cache registry needing its own credentials is configured.
+      # A fork has no OCIR secrets, and docker/login-action fails the job on an
+      # empty username rather than skipping -- which is what killed the first
+      # arm64 tag build here. Without it CACHE_REGISTRY falls back to the
+      # repository's own registry, already logged in above.
       - name: Login to OCIR (build cache)
-        if: steps.check_release.outputs.release_exists == 'false'
+        if: ${{ steps.check_release.outputs.release_exists == 'false' && vars.REGISTRY_HOST != '' }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ secrets.OCIR_USER }}
           password: ${{ secrets.OCIR_TOKEN }}
-          registry: iad.ocir.io
+          registry: ${{ vars.REGISTRY_HOST }}
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
 
@@ -322,7 +341,7 @@ jobs:
           # Cache manifests are registry-portable (oci-mediatypes=true) — read
           # them from OCIR while pushing images to GHCR. A missing :buildcache
           # ref 404s harmlessly into a cold build.
-          CACHE_REGISTRY: iad.ocir.io/idyksih5sir9/cozystack
+          CACHE_REGISTRY: ${{ vars.CACHE_REGISTRY || format('ghcr.io/{0}', github.repository) }}
           # amd64 here; build-arm64 builds arm64 natively. This job also
           # builds on the default docker driver, which handles a
           # multi-platform image only on the containerd image store.
@@ -475,7 +494,7 @@ jobs:
         env:
           DOCKER_CONFIG: ${{ runner.temp }}/.docker
           REGISTRY_AUTH_FILE: ${{ runner.temp }}/.docker/config.json
-          REGISTRY: ghcr.io/cozystack/cozystack
+          REGISTRY: ${{ vars.REGISTRY || format('ghcr.io/{0}', github.repository) }}
           IMAGE_TAG: ${{ github.ref_name }}
           PUSHED_TAGS_LOG: ${{ runner.temp }}/release-tree/pushed-tags
 
