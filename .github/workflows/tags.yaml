@@ -279,21 +279,19 @@ jobs:
             }
             core.setOutput('branch', branch);
 
-      # A GitHub-hosted runner carries roughly 14 GB free on the filesystem
-      # holding /var/lib/docker, and the whole packages tree does not fit: the
-      # amd64 leg ran for an hour and three quarters and then died with "No
-      # space left on device" -- from the runner's own log writer, not from the
-      # build, so the job ends with no usable error of its own.
+      # A GitHub-hosted runner has 145 GB, 86 GB of it free, and building the
+      # whole tree cold exhausts that -- the first attempt died with "No space
+      # left on device", raised by the runner's own log writer rather than by
+      # the build, so the job carried no error of its own.
       #
-      # Two moves, because either alone is marginal. The preinstalled
-      # toolchains are worth tens of gigabytes and nothing here uses them. The
-      # second partition, mounted at /mnt, is larger than the root one and is
-      # where the image layers belong; docker has to be stopped to move its
-      # root, and this must therefore run before buildx is set up.
+      # Dropping the preinstalled toolchains nothing here uses buys about 23 GB
+      # of it. (/mnt is not a second disk on these runners: df reports the same
+      # device as /, so moving anything there frees nothing. The rest of the
+      # room comes from pruning the build cache between the images and the
+      # assets, below.)
       #
       # Guarded on runner.environment: upstream's runners are persistent, and
-      # deleting their system directories or relocating their docker root would
-      # outlive this job.
+      # deleting their system directories would outlive this job.
       - name: Make room on the runner
         if: ${{ steps.check_release.outputs.release_exists == 'false' && runner.environment == 'github-hosted' }}
         run: |
@@ -304,14 +302,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
                       /usr/local/share/boost /usr/local/.ghcup \
                       /usr/local/lib/node_modules
-          # The images the runner ships with are not ones this build pulls, so
-          # the old root is discarded rather than copied across.
-          sudo systemctl stop docker
-          sudo rm -rf /var/lib/docker
-          sudo mkdir -p /mnt/docker
-          sudo ln -s /mnt/docker /var/lib/docker
-          sudo systemctl start docker
-          df -h / /mnt
+          df -h /
 
       - name: Checkout code
         if: steps.check_release.outputs.release_exists == 'false'
@@ -406,6 +397,24 @@ jobs:
           # Every tag the build pushes, for the stitch to move onto the
           # multi-arch indexes.
           PUSHED_TAGS_LOG: ${{ runner.temp }}/release-tree/pushed-tags
+
+      # The images are pushed by now, so the mode=max layers buildkit kept while
+      # producing them are spent -- and they are what fills the disk. Assets
+      # then write a raw disk image and compress it, which needs room for both
+      # at once: with the cache still resident, xz died on "No space left on
+      # device" after the images had already built successfully.
+      #
+      # The builder's cache only; images stay, because the assets are made from
+      # the installer image this job just built.
+      - name: Reclaim the build cache before the assets
+        if: ${{ steps.check_release.outputs.release_exists == 'false' && runner.environment == 'github-hosted' }}
+        run: |
+          set -eux
+          docker buildx prune --all --force --builder "$MATCHBOX_BUILDER" || true
+          docker buildx prune --all --force || true
+          df -h /
+        env:
+          MATCHBOX_BUILDER: ${{ steps.matchbox_buildx.outputs.name }}
 
       # Built here rather than in prepare-release: the Talos assets reuse the
       # kernel, initramfs and installer make build already produced for the
