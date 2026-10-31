@@ -273,3 +273,30 @@ _make_tree() {
   [ "$(yq -r '.jobs.build-arm64.steps[] | select(.name == "Report refs that are not multi-arch") | .run' "$wf")" = 'hack/verify-multiarch.sh --report packages' ]
   [ "$(yq -r '.jobs.build-arm64.steps[] | select(.name == "Build arm64 images") | .env.WRITE_CACHE' "$wf")" = 1 ]
 }
+
+# A first-party image lives wherever the build publishes it, so an entry naming
+# one registry excuses it there and nowhere else: the same tree built under
+# another owner sees the same image refused, and the entry it was meant to use
+# is reported stale in the same breath. That is how the fork's first release
+# died -- on one image, with its own allowlist entry sitting right there.
+@test "a */ entry matches the repository under any registry, and is not called stale" {
+  tmp=$(mktemp -d)
+  _stub_registry "$tmp/reg"
+  _make_tree "$tmp"
+  single=$(_single sandbox)
+  printf 'image: ghcr.io/other/fork/sandbox:v1@%s\n' "$single" >"$tmp/tree/system/api/values.yaml"
+  printf '*/sandbox  # harness only\n' >"$tmp/allowlist"
+
+  PATH="$MOCK_REG/bin:$PATH" hack/verify-multiarch.sh --allowlist "$tmp/allowlist" "$tmp/tree" >"$tmp/out" 2>&1
+  grep -q '^refs that failed (0):' "$tmp/out"
+  sed -n '/^allowed single-arch/,/^$/p' "$tmp/out" | grep -q 'ghcr.io/other/fork/sandbox:v1@.*(harness only)'
+  if sed -n '/^stale allowlist/,/^$/p' "$tmp/out" | grep -q 'sandbox'; then echo "FAIL: the entry that did the excusing was called stale"; false; fi
+
+  # It matches on a whole path segment, not on any trailing text: an image
+  # whose name merely ends in the entry's is a different image.
+  printf 'image: ghcr.io/other/fork/not-sandbox:v1@%s\n' "$(_single notsandbox)" >"$tmp/tree/system/cil/values.yaml"
+  rc=0
+  PATH="$MOCK_REG/bin:$PATH" hack/verify-multiarch.sh --allowlist "$tmp/allowlist" "$tmp/tree" >"$tmp/out" 2>&1 || rc=$?
+  [ "$rc" -eq 1 ]
+  sed -n '/^refs that failed/,/^$/p' "$tmp/out" | grep -q 'not-sandbox'
+}

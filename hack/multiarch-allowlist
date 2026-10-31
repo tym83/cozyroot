@@ -1,4 +1,10 @@
 # Repositories hack/verify-multiarch.sh lets stay single-arch in a release.
 # One repository per line, no tag or digest, each with a `# reason`: why the
 # image cannot be built for both architectures, not that it has not been yet.
-ghcr.io/cozystack/cozystack/e2e-sandbox  # CI harness only, an x86 KVM sandbox (packages/core/testing pins linux/amd64); never runs on a user cluster
+#
+# A leading `*/` matches that image under any registry and owner, by the tail
+# of its path. A first-party image is published wherever the build was told to
+# publish it -- upstream's own registry, or a fork's -- so an entry naming one
+# registry excuses it there and nowhere else, and the same tree built elsewhere
+# sees the same image refused.
+*/e2e-sandbox  # CI harness only, an x86 KVM sandbox (packages/core/testing pins linux/amd64); never runs on a user cluster

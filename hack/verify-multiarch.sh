@@ -19,9 +19,13 @@
 # third-party refs are checked alike: an arm64 node pulls both.
 #
 # The allowlist holds one repository per line with a mandatory `# reason`, and
-# no tag or digest, so bumping an allowed image needs no edit. Allowed refs are
-# still listed, under their own heading, and in tree mode an entry that
-# matches no ref that failed the check is named as stale.
+# no tag or digest, so bumping an allowed image needs no edit. An entry may
+# start with `*/`, which matches that repository under any registry and owner:
+# a first-party image is published wherever the build was told to publish it,
+# so an entry naming one registry excuses it there and nowhere else, and a fork
+# building the same tree sees the same image refused. Allowed refs are still
+# listed, under their own heading, and in tree mode an entry that matches no
+# ref that failed the check is named as stale.
 #
 # A registry that answers a lookup with a rate limit or a 5xx is asked again,
 # up to three times, VERIFY_MULTIARCH_RETRY_DELAY seconds (default 10) times
@@ -141,8 +145,21 @@ while IFS= read -r ref; do
   # reason, keeps the entry from being stale; the entry excuses a platform
   # verdict only, since a ref that cannot be read or stays rate-limited is no
   # more usable on amd64 than on arm64.
-  entry="$(printf '%s\n' "$allowed" | awk -v r="$repo" '$1 == r { $1 = ""; sub(/^ /, ""); print; exit }')"
-  [ -z "$entry" ] || used="${used}${repo}${nl}"
+  # Carries the entry's own key back, not the ref's repository, so a `*/` entry
+  # is marked used under the name it was written with and the staleness check
+  # below still finds it.
+  entry="$(printf '%s\n' "$allowed" | awk -v r="$repo" '
+    {
+      key = $1
+      hit = (key == r)
+      if (!hit && substr(key, 1, 2) == "*/") {
+        tail = substr(key, 2)
+        hit = (substr(r, length(r) - length(tail) + 1) == tail)
+      }
+      if (hit) { $1 = ""; sub(/^ /, ""); print key "\t" $0; exit }
+    }')"
+  [ -z "$entry" ] || used="${used}${entry%%	*}${nl}"
+  [ -z "$entry" ] || entry="${entry#*	}"
   why=""
   case "$missing" in
     "single-platform manifest"|"index without"*) why="$entry" ;;
