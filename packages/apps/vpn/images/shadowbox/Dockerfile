@@ -61,6 +61,19 @@ COPY --from=prometheus /out /
 COPY --from=source /src/src/shadowbox/scripts /scripts
 COPY --from=source /src/src/shadowbox/scripts/update_mmdb.sh /etc/periodic/weekly/update_mmdb.sh
 COPY --from=source /src/src/shadowbox/docker/cmd.sh /cmd.sh
-RUN mkdir -p /root/shadowbox/persisted-state && /etc/periodic/weekly/update_mmdb.sh
+# Seeding the GeoIP databases here is an optimization, not a requirement: the
+# same script is installed as a weekly cron job above, so a container that
+# starts without them fills them in on its own, and country attribution in the
+# metrics is empty until it does.
+#
+# It must not fail the build. The databases come from db-ip.com under a
+# month-stamped name, and the script already walks ten months back looking for
+# one that exists -- so a failure here is the host refusing us, not a missing
+# file. It refuses GitHub-hosted runners: all ten attempts for each database
+# came back inside 0.7s, roughly 70ms each, which is a rejection rather than a
+# lookup. Upstream builds on its own VMs and never sees it, which is exactly
+# why this is worth a line of explanation: the build is reproducible only as
+# far as a third party's willingness to serve the runner it happens to run on.
+RUN mkdir -p /root/shadowbox/persisted-state && /etc/periodic/weekly/update_mmdb.sh || true
 WORKDIR /opt/outline-server
 CMD ["/cmd.sh"]
