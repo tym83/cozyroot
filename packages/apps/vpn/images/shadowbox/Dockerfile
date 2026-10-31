@@ -74,6 +74,6 @@ COPY --from=source /src/src/shadowbox/docker/cmd.sh /cmd.sh
 # lookup. Upstream builds on its own VMs and never sees it, which is exactly
 # why this is worth a line of explanation: the build is reproducible only as
 # far as a third party's willingness to serve the runner it happens to run on.
-RUN mkdir -p /root/shadowbox/persisted-state && /etc/periodic/weekly/update_mmdb.sh || true
+RUN mkdir -p /root/shadowbox/persisted-state && { /etc/periodic/weekly/update_mmdb.sh || true; }
 WORKDIR /opt/outline-server
 CMD ["/cmd.sh"]
