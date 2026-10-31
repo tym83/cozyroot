@@ -343,7 +343,20 @@ jobs:
             installed="$(helm plugin list 2>/dev/null | awk '$1 == "unittest" { print $2 }' || true)"
             if [ "$installed" != "$HELM_UNITTEST_VERSION" ]; then
               [ -z "$installed" ] || helm plugin uninstall unittest
-              helm plugin install https://github.com/helm-unittest/helm-unittest --version "v${HELM_UNITTEST_VERSION}"
+              # Newer Helm verifies a plugin's provenance by default, and this
+              # plugin publishes none, so the install fails outright with
+              # "plugin source does not support verification". Older Helm has
+              # no such flag and rejects it, so ask whether this one does
+              # rather than passing it blind -- the runner image decides which
+              # Helm is here, and it changed under us mid-series.
+              #
+              # The pinned version above is the guarantee actually being relied
+              # on. Drop this once the plugin signs its releases.
+              verify=()
+              if helm plugin install --help 2>&1 | grep -q -- '--verify'; then
+                verify=(--verify=false)
+              fi
+              helm plugin install https://github.com/helm-unittest/helm-unittest --version "v${HELM_UNITTEST_VERSION}" "${verify[@]}"
             fi
           fi
           # Source archive bytes can change; verify the tag's commit before install.
