@@ -418,16 +418,27 @@ jobs:
       pull-requests: write
       actions: write
       id-token: write # keyless signing of the release checksums in hack/upload-assets.sh
+    env:
+      # Whether the CI app is configured here. The `secrets` context cannot be
+      # read from a step `if`, but a job-level env can read it and `env` can.
+      HAS_CI_APP: ${{ secrets.COZYSTACK_CI_APP_ID != '' }}
 
     steps:
+      # create-github-app-token fails the job on an empty app-id rather than
+      # skipping, and this is the first step of the job that stitches the
+      # multi-arch indexes -- so without the app a fork gets no release at all,
+      # having already paid for both build legs. The steps further down that
+      # need a token fall back to GITHUB_TOKEN; the job's own permissions
+      # (contents/packages: write) cover what they do, and upstream wants the
+      # app to act as the CI identity rather than for the access itself.
       - name: Generate GitHub App token
-        if: needs.build-amd64.outputs.release_exists == 'false'
+        if: ${{ needs.build-amd64.outputs.release_exists == 'false' && env.HAS_CI_APP == 'true' }}
         id: app-token
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
         with:
           app-id: ${{ secrets.COZYSTACK_CI_APP_ID }}
           private-key: ${{ secrets.COZYSTACK_CI_PRIVATE_KEY }}
-          owner: cozystack
+          owner: ${{ github.repository_owner }}
 
       - name: Checkout code
         if: needs.build-amd64.outputs.release_exists == 'false'
@@ -502,7 +513,7 @@ jobs:
       - name: Commit release artifacts
         if: needs.build-amd64.outputs.release_exists == 'false'
         env:
-          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name  "cozystack-ci[bot]"
           git config user.email "274107086+cozystack-ci[bot]@users.noreply.github.com"
@@ -598,7 +609,7 @@ jobs:
         if: needs.build-amd64.outputs.release_exists == 'false' && needs.build-amd64.outputs.is_rc == 'true'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           script: |
             const tag = '${{ needs.build-amd64.outputs.tag }}';
             const releases = await github.paginate(github.rest.repos.listReleases, {
@@ -623,7 +634,7 @@ jobs:
       - name: Create release branch
         if: needs.build-amd64.outputs.release_exists == 'false'
         env:
-          APP_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name  "cozystack-ci[bot]"
           git config user.email "274107086+cozystack-ci[bot]@users.noreply.github.com"
