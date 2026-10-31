@@ -160,7 +160,16 @@ jobs:
     runs-on: ${{ vars.RUNNER_LARGE || 'oracle-vm-24cpu-96gb-x86-64' }}
     # The budget prepare-release had while it also built; the stitch and the
     # uploads it no longer runs moved to prepare-release with their own.
-    timeout-minutes: 120
+    #
+    # Settable because the budget belongs to the runner, not to the work. This
+    # job writes no build cache (WRITE_CACHE defaults to 0 and nothing here
+    # raises it), so upstream's tag builds are only fast because build-main.yaml
+    # keeps a shared cache warm for them. A fork has neither that cache nor a
+    # 24-core machine, and runs the same tree cold on four cores: the first
+    # attempt here was killed at exactly 120 minutes, still building. The
+    # `runner` context is not available in a job-level timeout, so this is a
+    # variable rather than a condition.
+    timeout-minutes: ${{ vars.BUILD_TIMEOUT_MINUTES || 120 }}
     env:
       # The pipe falls back to direct on any proxy error (hack/common-envs.mk).
       GOPROXY: "https://proxy.golang.org|direct"
