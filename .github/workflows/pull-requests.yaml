@@ -346,17 +346,20 @@ jobs:
               # Newer Helm verifies a plugin's provenance by default, and this
               # plugin publishes none, so the install fails outright with
               # "plugin source does not support verification". Older Helm has
-              # no such flag and rejects it, so ask whether this one does
-              # rather than passing it blind -- the runner image decides which
-              # Helm is here, and it changed under us mid-series.
+              # no such flag and rejects it, and the runner image decides which
+              # one is here -- it changed under us mid-series.
+              #
+              # Try it, then fall back. Asking `--help` first does not work:
+              # the flag is absent from the plugin install help text on the
+              # very Helm whose error message demands it. A fallback that
+              # re-runs the plain install also surfaces the real error when the
+              # failure was something else entirely.
               #
               # The pinned version above is the guarantee actually being relied
               # on. Drop this once the plugin signs its releases.
-              verify=()
-              if helm plugin install --help 2>&1 | grep -q -- '--verify'; then
-                verify=(--verify=false)
-              fi
-              helm plugin install https://github.com/helm-unittest/helm-unittest --version "v${HELM_UNITTEST_VERSION}" "${verify[@]}"
+              plugin=https://github.com/helm-unittest/helm-unittest
+              helm plugin install "$plugin" --version "v${HELM_UNITTEST_VERSION}" --verify=false \
+                || helm plugin install "$plugin" --version "v${HELM_UNITTEST_VERSION}"
             fi
           fi
           # Source archive bytes can change; verify the tag's commit before install.
