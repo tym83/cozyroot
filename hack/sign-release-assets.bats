@@ -130,7 +130,9 @@ cleanup() {
 
 @test "signs the checksums and verifies them against the release workflows" {
     make_fixture
-    sign
+    # Pinned, because under Actions this is already set to whichever repository
+    # is running the suite, and the identities below are upstream's.
+    GITHUB_REPOSITORY=cozystack/cozystack sign
 
     grep -qxF "$work/assets/cozystack-checksums.txt" "$work/cosign-sign-blob"
     grep -qxF "$work/assets/cozystack-checksums.txt.sigstore.json" "$work/cosign-sign-blob"
@@ -162,12 +164,44 @@ cleanup() {
 }
 
 @test "docs/release.md tells users to verify the identity the script verifies" {
-    regexp="$(sed -n "s/^IDENTITY_REGEXP='\(.*\)'\$/\1/p" "$SCRIPT")"
-    if [ -z "$regexp" ]; then
-        echo "IDENTITY_REGEXP not found in $SCRIPT" >&2
+    # The documented pattern is upstream's, which is what the script falls back
+    # to when nothing says otherwise, so the template is filled in the same way
+    # here rather than read as a literal.
+    template="$(sed -n "s/^IDENTITY_REGEXP_TEMPLATE='\(.*\)'\$/\1/p" "$SCRIPT")"
+    default="$(sed -n "s/^IDENTITY_REPO_DEFAULT='\(.*\)'\$/\1/p" "$SCRIPT")"
+    if [ -z "$template" ] || [ -z "$default" ]; then
+        echo "IDENTITY_REGEXP_TEMPLATE or IDENTITY_REPO_DEFAULT not found in $SCRIPT" >&2
         exit 1
     fi
+    regexp="${template/@REPO@/${default//./\\.}}"
     grep -qF -- "--certificate-identity-regexp '$regexp'" "$REPO_ROOT/docs/release.md"
+}
+
+# A fork signs with its own OIDC identity. Verifying against upstream's rejects
+# that signature, so the release fails at the last step, with every image
+# already built and published.
+@test "the verified identity follows the repository the job runs in" {
+    make_fixture
+    GITHUB_REPOSITORY=someone/their-fork.io sign
+
+    regexp="$(grep -A1 -xF -- --certificate-identity-regexp "$work/cosign-verify-blob" | tail -n1)"
+    identity=https://github.com/someone/their-fork.io/.github/workflows/tags.yaml@refs/tags/v1.2.3-rc.1
+    if ! printf '%s\n' "$identity" | grep -qE "$regexp"; then
+        echo "expected $regexp to accept $identity" >&2
+        exit 1
+    fi
+    # The dot in the name is a literal, not "any character".
+    if printf '%s\n' "https://github.com/someone/their-forkXio/.github/workflows/tags.yaml@refs/tags/v1.2.3" | grep -qE "$regexp"; then
+        echo "expected $regexp to treat the dot in the repository name literally" >&2
+        exit 1
+    fi
+    # And upstream's identity no longer passes: this is not a widened pattern.
+    if printf '%s\n' "https://github.com/cozystack/cozystack/.github/workflows/tags.yaml@refs/tags/v1.2.3" | grep -qE "$regexp"; then
+        echo "expected $regexp to reject another repository" >&2
+        exit 1
+    fi
+
+    cleanup
 }
 
 @test "fails when the signature does not verify" {
