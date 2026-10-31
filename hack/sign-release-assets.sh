@@ -40,7 +40,18 @@ BUNDLE=cozystack-checksums.txt.sigstore.json
 # pre-release, on a v* tag push, and promote-rc.yaml for a stable one, dispatched
 # from main only. A run from any other ref signs, but fails the check below.
 # docs/release.md shows users the same pattern.
-IDENTITY_REGEXP='^https://github\.com/cozystack/cozystack/\.github/workflows/(tags\.yaml@refs/tags/v|promote-rc\.yaml@refs/heads/main$)'
+#
+# The repository is the one the signing job actually runs in, because that is
+# what the OIDC identity names. Pinning it to upstream means a fork signs with
+# its own identity and then rejects its own signature -- which is where the
+# first release built outside cozystack/cozystack stopped, after both
+# architectures had already been built, stitched and gated. The default keeps
+# the exact pattern docs/release.md shows users.
+IDENTITY_REPO_DEFAULT='cozystack/cozystack'
+IDENTITY_REGEXP_TEMPLATE='^https://github\.com/@REPO@/\.github/workflows/(tags\.yaml@refs/tags/v|promote-rc\.yaml@refs/heads/main$)'
+identity_repo="${GITHUB_REPOSITORY:-$IDENTITY_REPO_DEFAULT}"
+# A repository name may hold a dot, the one regex metacharacter it can carry.
+IDENTITY_REGEXP="${IDENTITY_REGEXP_TEMPLATE/@REPO@/${identity_repo//./\\.}}"
 OIDC_ISSUER=https://token.actions.githubusercontent.com
 
 if [ "$#" -lt 2 ]; then
