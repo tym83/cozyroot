@@ -4,8 +4,7 @@
 # --shutdown-drain-timeout while the pin still named a binary that does not
 # know the flag, and the controller then crash-loops on a fresh install with
 # "flag provided but not defined". A version tag cannot drift that way.
-image: "ghcr.io/cozystack/cozystack/flux-plunger:v1.7.0@sha256:f09439183b70fd1a267f0bdbdc5d01e1bc75ad5559f75ccf216a07f277b76050"
-
+image: "ghcr.io/tym83/cozyroot/flux-plunger:v1.7.0-alpha.13@sha256:ddaea644bf81d6cd169f392a74652c6d4ddcffa51da1c705862e79be3f067d1c"
 # How long flux-plunger is given to stop, between 40 and 140. On SIGTERM it stops
 # its manager (up to 10 seconds), then gives up the uninstall fences it holds,
 # waiting for helm-controller to uninstall a release being deleted, under a
@@ -14,7 +13,6 @@ image: "ghcr.io/cozystack/cozystack/flux-plunger:v1.7.0@sha256:f09439183b70fd1a2
 # acts. The pre-delete hook waits for the pod a little longer than this before it
 # releases what is left.
 shutdownGracePeriodSeconds: 90
-
 # Image for the pre-delete uninstall-fence cleanup hook Job (see
 # templates/uninstall-fence-cleanup.yaml). Only needs a kubectl binary. The tag
 # is digest-pinned so an upstream retag does not change what runs across the

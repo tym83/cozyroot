@@ -40,9 +40,9 @@ cilium:
   ipam:
     mode: "kubernetes"
   image:
-    repository: ghcr.io/cozystack/cozystack/cilium
-    tag: v1.6.0
-    digest: "sha256:136a7dfff4d6adcd448424c2354144160028a8e96eb6558b917fd3ee6d7b39fe"
+    repository: ghcr.io/tym83/cozyroot/cilium
+    tag: v1.7.0-alpha.13
+    digest: "sha256:5e8a1f3e1443ab126f9c9033050dbb43ba46e1fa828b7024f10efd6d1c2f9e6e"
   envoy:
     enabled: true
     # Keep the per-type xDS the 1.19 agent and envoy speak. The 1.20 chart
@@ -134,7 +134,7 @@ cilium:
     # unpatched upstream operator the rebuild starts from, so a tree rendered
     # without a build still pulls an image that exists.
     image:
-      override: "quay.io/cilium/operator-generic:v1.20.2@sha256:64d8798350e8569b8e7622563fed6e44dce2625f311e4651b774816516c744fc"
+      override: "ghcr.io/tym83/cozyroot/cilium-operator:v1.7.0-alpha.13@sha256:d0233524a44eba36b4caea1997c271f5245257d812117b7ab872a5468042675d"
     rollOutPods: true
     replicas: 1
     resources:

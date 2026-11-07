@@ -3,8 +3,8 @@ keycloak-operator:
     # The host stays inside `repository`: the nightly mirror's host rewrite
     # cannot reach a build registry whose `registry` key holds only part of it.
     registry: ""
-    repository: ghcr.io/cozystack/cozystack/keycloak-operator
-    tag: "latest@sha256:27279247dfbd2d1e86fc4e827d34c891880ca65eefd75da1701bc0a1adf865a9"
+    repository: ghcr.io/tym83/cozyroot/keycloak-operator
+    tag: "v1.7.0-alpha.13@sha256:f6bd24d294fd77bef84112a9f3141dd3a96f5035eead345a0c33da841684dd45"
   clusterReconciliationEnabled: true
   resources:
     limits:
