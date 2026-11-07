@@ -230,3 +230,17 @@ affinity:
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+The run strategy the VirtualMachine is given. runStrategy is authoritative
+when set; otherwise the older `running` boolean decides. Both the VM and the
+readiness monitor read it from here, so a machine that is not meant to run
+cannot be held against a monitor that still expects a pod.
+*/}}
+{{- define "virtual-machine.runStrategy" -}}
+{{- if hasKey .Values "runStrategy" -}}
+{{- .Values.runStrategy -}}
+{{- else -}}
+{{- ternary "Always" "Halted" (.Values.running | default true) -}}
+{{- end -}}
+{{- end }}
