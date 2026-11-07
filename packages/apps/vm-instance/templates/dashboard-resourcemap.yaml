@@ -29,14 +29,21 @@ roleRef:
   name: {{ .Release.Name }}-dashboard-resources
   apiGroup: rbac.authorization.k8s.io
 ---
+{{- /*
+A halted machine has no pod, so a monitor that still expects one never
+reports ready: the release then waits out its whole timeout and settles as
+not ready, which makes stopping a machine through its own chart impossible.
+What is expected has to follow what was asked for.
+*/}}
+{{- $expected := ternary 0 1 (eq (include "virtual-machine.runStrategy" .) "Halted") }}
 apiVersion: cozystack.io/v1alpha1
 kind: WorkloadMonitor
 metadata:
   name: {{ $.Release.Name }}
   namespace: {{ $.Release.Namespace }}
 spec:
-  replicas: 1
-  minReplicas: 1
+  replicas: {{ $expected }}
+  minReplicas: {{ $expected }}
   kind: virtual-machine
   type: virtual-machine
   selector:
