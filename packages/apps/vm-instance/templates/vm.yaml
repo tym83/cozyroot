@@ -28,11 +28,7 @@ metadata:
   labels:
     {{- include "virtual-machine.labels" . | nindent 4 }}
 spec:
-  {{- if hasKey .Values "runStrategy" }}
-  runStrategy: {{ .Values.runStrategy }}
-  {{- else }}
-  runStrategy: {{ ternary "Always" "Halted" (.Values.running | default true) }}
-  {{- end }}
+  runStrategy: {{ include "virtual-machine.runStrategy" . }}
   {{- with $instanceType }}
   instancetype:
     kind: VirtualMachineClusterInstancetype

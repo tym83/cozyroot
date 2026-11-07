@@ -1,0 +1,91 @@
+# What the readiness monitor expects has to follow what was asked for. A halted
+# machine has no pod; a monitor still expecting one never reports ready, the
+# release waits out its whole timeout and settles as not ready, and stopping a
+# machine through its own chart becomes impossible -- which is how it is
+# stopped, since the run strategy is a value of this chart.
+suite: readiness follows the run strategy
+templates:
+  - templates/dashboard-resourcemap.yaml
+  - templates/vm.yaml
+release:
+  name: vm
+  namespace: tenant-test
+# The chart validates instanceType and instanceProfile against the cluster;
+# blank skips both lookups, which this suite has no interest in.
+set:
+  instanceType: ""
+  instanceProfile: ""
+  resources:
+    cpu: 1
+    sockets: 1
+    memory: 1Gi
+  _cluster:
+    scheduling:
+      dedicatedNodesForWindowsVMs: "false"
+tests:
+  - it: expects one replica of a running machine
+    templates:
+      - templates/dashboard-resourcemap.yaml
+    documentSelector:
+      path: kind
+      value: WorkloadMonitor
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.minReplicas
+          value: 1
+
+  - it: expects none of a halted machine
+    set:
+      runStrategy: Halted
+    templates:
+      - templates/dashboard-resourcemap.yaml
+    documentSelector:
+      path: kind
+      value: WorkloadMonitor
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 0
+      - equal:
+          path: spec.minReplicas
+          value: 0
+
+  # The chart's values carry runStrategy, so it is always set and the older
+  # `running` boolean never decides on its own. Pinned because the opposite
+  # reading is the natural one: `running: false` looks like it stops a machine
+  # and does not. Both the VM and the monitor have to agree on that, which is
+  # the whole reason they read one helper.
+  - it: keeps the run strategy over the legacy running flag
+    set:
+      running: false
+    asserts:
+      - equal:
+          path: spec.runStrategy
+          value: Always
+        template: templates/vm.yaml
+      - equal:
+          path: spec.replicas
+          value: 1
+        template: templates/dashboard-resourcemap.yaml
+        documentSelector:
+          path: kind
+          value: WorkloadMonitor
+
+  - it: keeps a non-default strategy on the machine
+    set:
+      runStrategy: RerunOnFailure
+    asserts:
+      - equal:
+          path: spec.runStrategy
+          value: RerunOnFailure
+        template: templates/vm.yaml
+      - equal:
+          path: spec.replicas
+          value: 1
+        template: templates/dashboard-resourcemap.yaml
+        documentSelector:
+          path: kind
+          value: WorkloadMonitor
