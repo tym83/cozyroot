@@ -1,0 +1,86 @@
+# packageOverrides reaches the components of a Package without the chart that
+# installs it growing a knob of its own. The suite is written against what an
+# operator actually does with it: lowering the requests the platform's own
+# components reserve on hardware smaller than the one they were sized for.
+suite: package overrides
+templates:
+  - templates/bundles/system.yaml
+release:
+  name: cozystack
+  namespace: cozy-system
+tests:
+  - it: carries nothing into a Package when nothing is set
+    values:
+      - ../values-isp-slim-generic.yaml
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - isNull:
+          path: spec.components.blockstor
+
+  - it: merges operator values over what the bundle computed
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      packageOverrides:
+        cozystack.linstor:
+          blockstor:
+            values:
+              apiserver:
+                resources:
+                  requests:
+                    memory: 64Mi
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - equal:
+          path: spec.components.blockstor.values.apiserver.resources.requests.memory
+          value: 64Mi
+      # The bundle's own component values for this Package survive the merge.
+      - equal:
+          path: spec.components.linstor.values.talos.enabled
+          value: false
+
+  - it: wins over a value the bundle computed for the same key
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      packageOverrides:
+        cozystack.linstor:
+          linstor:
+            values:
+              talos:
+                enabled: true
+    documentSelector:
+      path: metadata.name
+      value: cozystack.linstor
+    asserts:
+      - equal:
+          path: spec.components.linstor.values.talos.enabled
+          value: true
+
+  # On the slim variants most packages are emitted by the opt-in helper rather
+  # than the always-on one. That is a second place a Package is written, and an
+  # override that reached only the first would look like it worked everywhere.
+  - it: reaches a package the slim variant makes opt-in
+    values:
+      - ../values-isp-slim-generic.yaml
+    set:
+      bundles.enabledPackages:
+        - cozystack.monitoring-agents
+      packageOverrides:
+        cozystack.monitoring-agents:
+          vmagent:
+            values:
+              resources:
+                requests:
+                  memory: 96Mi
+    documentSelector:
+      path: metadata.name
+      value: cozystack.monitoring-agents
+    asserts:
+      - equal:
+          path: spec.components.vmagent.values.resources.requests.memory
+          value: 96Mi

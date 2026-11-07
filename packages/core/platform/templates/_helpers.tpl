@@ -1,3 +1,24 @@
+{{/*
+The components of one Package: what the bundle computed, with the values an
+operator set for that Package in packageOverrides merged over them. Both
+helpers that emit a Package go through here, so one entry covers a package
+whether its variant makes it always-on or opt-in, and no chart has to grow a
+knob of its own for the platform to reach it. The operator's values win: the
+bundle's are the install default, and departing from that default is the whole
+point of the override. Returns YAML; call it through fromYaml.
+Call as (list <package name> $root <components dict>).
+*/}}
+{{- define "cozystack.platform.package.components" -}}
+{{- $name := index . 0 -}}
+{{- $root := index . 1 -}}
+{{- $components := index . 2 -}}
+{{- $overrides := dig $name dict ($root.Values.packageOverrides | default dict) -}}
+{{- if $overrides -}}
+{{- $components = mergeOverwrite (deepCopy $components) (deepCopy $overrides) -}}
+{{- end -}}
+{{- $components | toYaml -}}
+{{- end }}
+
 {{- define "cozystack.platform.package" -}}
 {{- $name := index . 0 -}}
 {{- $variant := default "default" (index . 1) -}}
@@ -6,6 +27,7 @@
 {{- if gt (len .) 3 -}}
 {{- $components = index . 3 -}}
 {{- end -}}
+{{- $components = include "cozystack.platform.package.components" (list $name $root $components) | fromYaml -}}
 {{- $disabled := default (list) $root.Values.bundles.disabledPackages -}}
 {{- if not (has $name $disabled) -}}
 {{- if eq $name "cozystack.networking" -}}
@@ -68,6 +90,7 @@ Call as (list $ <variant about to be rendered>).
 {{- if gt (len .) 3 -}}
 {{- $components = index . 3 -}}
 {{- end -}}
+{{- $components = include "cozystack.platform.package.components" (list $name $root $components) | fromYaml -}}
 {{- $disabled := default (list) $root.Values.bundles.disabledPackages -}}
 {{- $enabled := default (list) $root.Values.bundles.enabledPackages -}}
 {{- if and (has $name $enabled) (not (has $name $disabled)) -}}

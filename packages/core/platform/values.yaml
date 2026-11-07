@@ -33,6 +33,31 @@ migrations:
   # Reset it to false once the upgrade is through, or the next platform upgrade
   # that adds an etcd migration will skip its snapshot too.
   etcdAdoptSkipBackup: false
+# Values for the components of individual packages, merged over whatever the
+# bundle computed for them. The key is a Package name and the value is its
+# spec.components map, exactly as the Package carries it:
+#
+#   packageOverrides:
+#     cozystack.networking:
+#       cilium:
+#         values:
+#           cilium:
+#             envoy:
+#               resources:
+#                 requests:
+#                   memory: 128Mi
+#
+# This exists because the platform's own components carry requests and replica
+# counts sized for server-class nodes, and nothing in the install knows how big
+# the machines are. On small hardware those requests reserve several gigabytes
+# that the components never touch, and the kubelet turns pods away against
+# memory that is in fact free. Rather than give every chart a knob of its own,
+# the platform takes the values here and merges them over the bundle's at the
+# one point where a Package is emitted.
+#
+# An entry for a package the variant does not install is inert.
+packageOverrides: {}
+
 # Bundle deployment configuration
 bundles:
   system:
