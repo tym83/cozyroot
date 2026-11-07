@@ -13,6 +13,7 @@ templates:
   - templates/satellites-talos.yaml
   - templates/linstor-internal-tls.yaml
   - templates/linstor-api-tls.yaml
+  - templates/external-client-tls.yaml
   - templates/plunger/configmap-scripts.yaml
 release:
   name: linstor
@@ -149,3 +150,36 @@ tests:
       - equal:
           path: spec.internalTLS.certManager.name
           value: linstor-internal-ca
+
+  # The operator reads this Secret by a fixed name for the CSI driver and the
+  # affinity controller, and issues it itself only when it deploys a controller
+  # of its own. Without it LinstorCluster never reaches Available, no
+  # LinstorSatellite is created, and volumes stay Pending with the only clue
+  # being a missing Secret.
+  - it: issues the client certificate the operator expects, from blockstor's CA
+    values:
+      - ../values-blockstor.yaml
+    templates:
+      - templates/external-client-tls.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: linstor-client-tls
+      - equal:
+          path: spec.secretName
+          value: linstor-client-tls
+      - equal:
+          path: spec.issuerRef.name
+          value: blockstor-api-ca
+      - contains:
+          path: spec.usages
+          content: client auth
+
+  - it: leaves the certificate to the operator when it deploys its own controller
+    templates:
+      - templates/external-client-tls.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
