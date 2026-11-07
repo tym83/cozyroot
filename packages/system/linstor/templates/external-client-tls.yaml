@@ -1,0 +1,38 @@
+{{- if .Values.externalController.enabled }}
+{{- /*
+The client certificate piraeus presents to the external API.
+
+With a controller of its own, the operator issues this certificate as part of
+deploying it, from the CA named in apiTLS. Pointed at an external controller it
+deploys nothing -- and still reads the Secret, by the fixed name below, for the
+CSI driver and the affinity controller. Nothing then creates it: the operator
+holds LinstorCluster at Available=False with `Secret "linstor-client-tls" not
+found`, no LinstorSatellite is ever created, and every csi-node sits in its
+`satellite-online` init container while volumes stay Pending. The failure
+names a Secret rather than a certificate, so it reads as a missing input
+rather than a step the mode skipped.
+
+blockstor's own client certificate is not this one: its Secret has the name
+that chart gives it, and the operator does not take a name here. Both are
+issued from the same CA, so the API accepts either.
+*/}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: linstor-client-tls
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: linstor-client-tls
+  commonName: linstor-client
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages:
+    - client auth
+    - digital signature
+    - key encipherment
+  issuerRef:
+    name: {{ .Values.externalController.caIssuer }}
+    kind: Issuer
+{{- end }}
