@@ -142,3 +142,36 @@ externalController:
   # "fixes".
   satelliteNodeSelector:
     piraeus.io/satellite: "provided-by-blockstor"
+  # Keep the CSI driver registered by giving each blockstor node the
+  # `Aux/topology/*` property the operator compares that registration against.
+  #
+  # Switching the satellites off takes away the only thing that wrote those
+  # properties, while the operator's reconcileCSINodes goes on comparing them
+  # with the topology keys the driver registered. The driver always registers
+  # `linbit.com/hostname`, so with no matching property the two sets never
+  # agree: the operator drops the driver's CSINode entry and the csi-node pod
+  # so it registers again, the new pod registers the same key, and the pods
+  # churn every couple of seconds. Nothing calls this an error -- volumes keep
+  # working on whatever registration happens to be in place at the moment they
+  # are provisioned, and LinstorCluster merely sits at `Configured=Unknown`.
+  #
+  # This is blockstor's job, as the owner of the nodes, and it belongs there.
+  # Switch this off once blockstor sets the property itself.
+  nodeTopologyProperty:
+    enabled: true
+    # A node acquires the property shortly after it joins, and until it does
+    # its csi-node pod churns, so the interval is the width of that window.
+    schedule: "*/2 * * * *"
+
+# Image for the topology-property CronJob (see
+# templates/csi-topology-property.yaml). Only needs a kubectl binary. The tag is
+# digest-pinned so an upstream retag does not change what runs across the fleet;
+# refresh by resolving the current manifest-list digest
+# (`docker manifest inspect docker.io/clastix/kubectl:v1.32`) and updating
+# `digest` below. Same image and digest the etcd-operator hook pins.
+# renovate: datasource=docker depName=docker.io/clastix/kubectl
+kubectlImage:
+  repository: docker.io/clastix/kubectl
+  tag: v1.32
+  digest: sha256:b9ef7d8dbe65bcc81a46c09b8dc7543103055021c4f43287bf59e92a8f4fe05c
+  pullPolicy: IfNotPresent

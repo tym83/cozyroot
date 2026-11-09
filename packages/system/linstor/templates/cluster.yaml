@@ -21,7 +21,26 @@ spec:
          server, which are the parts of piraeus this mode exists to keep --
          and nothing reports an error when they vanish: volumes simply stay
          Pending because no node is said to have storage. The patches below
-         take the selector back off them. */}}
+         take the selector back off them.
+
+         Switching the satellites off also takes away the only thing that
+         wrote the nodes' `Aux/topology/*` properties, and the operator's
+         reconcileCSINodes still compares those against the topology keys
+         the CSI driver registered with the kubelet. The driver always
+         registers `linbit.com/hostname`, so with no such property the two
+         sets never match: the operator deletes the driver's CSINode entry
+         and the csi-node pod to make it re-register, the new pod registers
+         the same key, and the pods are recreated roughly every two seconds
+         for as long as the mode is on. Nothing in piraeus reports this as
+         an error either -- LinstorCluster merely sits at
+         `Configured=Unknown`.
+
+         So an external controller must set those properties on the nodes
+         it owns, at least `Aux/topology/linbit.com/hostname` per node.
+         Neither the satellites nor the CSI driver will do it here: the
+         driver only reads topologies, and the operator writes them from
+         LinstorSatelliteConfiguration, which this mode has no satellites
+         to apply. */}}
   nodeSelector:
     {{- toYaml .Values.externalController.satelliteNodeSelector | nindent 4 }}
 {{- else }}

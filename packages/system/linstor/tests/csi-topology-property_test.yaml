@@ -1,0 +1,89 @@
+# The CSI driver stays registered only while each node carries a matching
+# `Aux/topology/*` property. Without one, piraeus-operator deletes the driver's
+# CSINode entry and the csi-node pod so it registers again, the new pod
+# registers the same `linbit.com/hostname`, and the pods churn every couple of
+# seconds -- with nothing reporting an error. These tests hold the shape of the
+# job that keeps the property there, and the fact that it exists only in the
+# mode that needs it.
+suite: the node topology property the CSI driver is matched against
+templates:
+  - templates/csi-topology-property.yaml
+release:
+  name: linstor
+  namespace: cozy-linstor
+tests:
+  - it: is absent when piraeus provides the satellites, which write the property themselves
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: runs against an external controller, with a grant that cannot create or delete nodes
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - hasDocuments:
+          count: 4
+      - containsDocument:
+          kind: CronJob
+          apiVersion: batch/v1
+          name: linstor-csi-topology-property
+          namespace: cozy-linstor
+        documentIndex: 3
+      - equal:
+          path: rules[0].verbs
+          value: ["get", "list", "patch"]
+        documentIndex: 1
+      - equal:
+          path: rules[0].resources
+          value: ["nodes"]
+        documentIndex: 1
+      - equal:
+          path: rules[0].apiGroups
+          value: ["blockstor.cozystack.io"]
+        documentIndex: 1
+
+  - it: writes the one property key the operator compares against
+    template: templates/csi-topology-property.yaml
+    documentIndex: 3
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      # The key is what matters and the value is never read, so assert the key
+      # alone: it is the whole reason the job exists, and a typo in it brings
+      # the two-second pod churn back with nothing reporting an error.
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
+          pattern: "Aux/topology/linbit\\.com/hostname"
+
+  - it: cannot stack up behind itself or outlive its schedule
+    documentIndex: 3
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - equal:
+          path: spec.concurrencyPolicy
+          value: Forbid
+      - equal:
+          path: spec.jobTemplate.spec.activeDeadlineSeconds
+          value: 120
+
+  - it: runs as a verifiable non-root user, which the image's own name is not
+    documentIndex: 3
+    values:
+      - ../values-blockstor.yaml
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.runAsUser
+          value: 65532
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.securityContext.runAsNonRoot
+          value: true
+
+  - it: can be switched off once blockstor sets the property itself
+    values:
+      - ../values-blockstor.yaml
+    set:
+      externalController.nodeTopologyProperty.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
